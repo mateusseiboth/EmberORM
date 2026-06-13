@@ -1,0 +1,86 @@
+{
+  "name": "ember-orm-vscode",
+  "displayName": "EmberORM",
+  "description": "Syntax highlighting, formatting, diagnostics and completion for EmberORM `.ember` schema files.",
+  "version": "0.1.0",
+  "license": "MIT",
+  "publisher": "ember-orm",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": ["Programming Languages", "Snippets", "Formatters"],
+  "keywords": ["ember", "emberorm", "firebird", "orm", "prisma", "schema"],
+  "main": "./out/extension.js",
+  "activationEvents": ["onLanguage:ember"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "ember",
+        "aliases": ["Ember", "ember", "EmberORM"],
+        "extensions": [".ember"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "ember",
+        "scopeName": "source.ember",
+        "path": "./syntaxes/ember.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "ember",
+        "path": "./snippets/ember.json"
+      }
+    ],
+    "commands": [
+      { "command": "ember.format", "title": "Ember: Format schema" },
+      { "command": "ember.generate", "title": "Ember: Generate client" },
+      { "command": "ember.dbPull", "title": "Ember: Pull database schema (db pull)" },
+      { "command": "ember.validate", "title": "Ember: Validate schema" }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "when": "resourceLangId == ember",
+          "command": "ember.format",
+          "group": "1_modification"
+        }
+      ],
+      "commandPalette": [
+        { "command": "ember.format", "when": "resourceLangId == ember" }
+      ]
+    },
+    "configuration": {
+      "title": "EmberORM",
+      "properties": {
+        "ember.validateOnType": {
+          "type": "boolean",
+          "default": true,
+          "description": "Validate the schema as you type (otherwise on save)."
+        },
+        "ember.cliPath": {
+          "type": "string",
+          "default": "npx ember",
+          "description": "Command used to run the Ember CLI for generate/db pull."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "watch": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "vscode:prepublish": "tsup"
+  },
+  "dependencies": {
+    "ember-orm": "file:../.."
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.75.0",
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.0"
+  }
+}

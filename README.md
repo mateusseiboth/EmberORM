@@ -95,6 +95,21 @@ model Post {
 | Logging           | `log: true` or a `QueryEvent` callback                                     |
 | Tooling           | `ember init / db pull / generate / format / validate`                     |
 
+## Editor support
+
+A VSCode extension lives in [`editors/vscode`](./editors/vscode) — a Prisma-like
+experience for `.ember` files: syntax highlighting, as-you-type diagnostics
+(via the real parser/validator), canonical formatting, completion (keywords,
+types, `@`/`@@` attributes, `@db.*` native types, default functions), hover, and
+commands for generate / db pull / validate.
+
+```bash
+cd editors/vscode && npm install && npm run build   # then press F5 in VSCode
+```
+
+Editor tooling consumes the driver-free `ember-orm/editor` entry point (schema
+parser, validator, printer — no database driver).
+
 ## Documentation
 
 See [`/doc`](./doc) for the architecture, schema language, query API, and the

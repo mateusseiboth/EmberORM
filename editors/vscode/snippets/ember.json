@@ -1,0 +1,68 @@
+{
+  "datasource block": {
+    "prefix": "datasource",
+    "body": [
+      "datasource ${1:db} {",
+      "  provider = \"firebird\"",
+      "  url      = env(\"${2:DATABASE_URL}\")",
+      "}"
+    ],
+    "description": "Define the Firebird datasource"
+  },
+  "generator block": {
+    "prefix": "generator",
+    "body": [
+      "generator ${1:client} {",
+      "  provider = \"ember-client-js\"",
+      "  output   = \"${2:../generated}\"",
+      "}"
+    ],
+    "description": "Define the client generator"
+  },
+  "model block": {
+    "prefix": "model",
+    "body": [
+      "model ${1:Name} {",
+      "  id        Int      @id @default(autoincrement())",
+      "  $0",
+      "  createdAt DateTime @default(now())",
+      "}"
+    ],
+    "description": "Define a model"
+  },
+  "enum block": {
+    "prefix": "enum",
+    "body": ["enum ${1:Name} {", "  ${2:VALUE}", "}"],
+    "description": "Define an enum"
+  },
+  "field": {
+    "prefix": "field",
+    "body": "${1:name} ${2|String,Boolean,Int,BigInt,Float,Decimal,DateTime,Json,Bytes|}${3|?,[]|}",
+    "description": "A model field"
+  },
+  "id field": {
+    "prefix": "id",
+    "body": "id Int @id @default(autoincrement())",
+    "description": "Auto-increment primary key"
+  },
+  "relation field": {
+    "prefix": "relation",
+    "body": "${1:author} ${2:User} @relation(fields: [${3:authorId}], references: [${4:id}], onDelete: ${5|Cascade,Restrict,NoAction,SetNull,SetDefault|})",
+    "description": "A relation with a foreign key"
+  },
+  "@@map": {
+    "prefix": "@@map",
+    "body": "@@map(\"${1:TABLE_NAME}\")",
+    "description": "Map the model to a database table name"
+  },
+  "@@unique": {
+    "prefix": "@@unique",
+    "body": "@@unique([${1:fieldA}, ${2:fieldB}])",
+    "description": "Composite unique constraint"
+  },
+  "@@index": {
+    "prefix": "@@index",
+    "body": "@@index([${1:field}])",
+    "description": "Index"
+  }
+}

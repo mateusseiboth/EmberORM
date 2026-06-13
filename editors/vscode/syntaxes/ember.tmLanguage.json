@@ -1,0 +1,145 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Ember",
+  "scopeName": "source.ember",
+  "fileTypes": ["ember"],
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#blocks" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.block.documentation.ember",
+          "match": "///.*$"
+        },
+        {
+          "name": "comment.line.double-slash.ember",
+          "match": "//.*$"
+        }
+      ]
+    },
+    "blocks": {
+      "patterns": [
+        {
+          "name": "meta.block.model.ember",
+          "begin": "\\b(model|type|view)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "beginCaptures": {
+            "1": { "name": "storage.type.model.ember keyword.ember" },
+            "2": { "name": "entity.name.type.model.ember" }
+          },
+          "end": "\\}",
+          "endCaptures": { "0": { "name": "punctuation.definition.block.end.ember" } },
+          "patterns": [{ "include": "#body" }]
+        },
+        {
+          "name": "meta.block.enum.ember",
+          "begin": "\\b(enum)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "beginCaptures": {
+            "1": { "name": "storage.type.enum.ember keyword.ember" },
+            "2": { "name": "entity.name.type.enum.ember" }
+          },
+          "end": "\\}",
+          "endCaptures": { "0": { "name": "punctuation.definition.block.end.ember" } },
+          "patterns": [
+            { "include": "#comments" },
+            { "include": "#attributes" },
+            { "include": "#strings" },
+            {
+              "name": "constant.other.enum.ember variable.other.enummember.ember",
+              "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b"
+            }
+          ]
+        },
+        {
+          "name": "meta.block.config.ember",
+          "begin": "\\b(datasource|generator)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "beginCaptures": {
+            "1": { "name": "storage.type.config.ember keyword.ember" },
+            "2": { "name": "entity.name.type.config.ember" }
+          },
+          "end": "\\}",
+          "endCaptures": { "0": { "name": "punctuation.definition.block.end.ember" } },
+          "patterns": [
+            { "include": "#comments" },
+            {
+              "name": "variable.other.key.ember",
+              "match": "\\b([A-Za-z_][A-Za-z0-9_]*)\\s*(=)",
+              "captures": {
+                "1": { "name": "variable.other.assignment.ember" },
+                "2": { "name": "keyword.operator.assignment.ember" }
+              }
+            },
+            { "include": "#functions" },
+            { "include": "#strings" },
+            { "include": "#constants" }
+          ]
+        }
+      ]
+    },
+    "body": {
+      "patterns": [
+        { "include": "#comments" },
+        { "include": "#blockAttributes" },
+        { "include": "#fieldType" },
+        { "include": "#attributes" },
+        { "include": "#functions" },
+        { "include": "#strings" },
+        { "include": "#constants" },
+        { "include": "#numbers" }
+      ]
+    },
+    "fieldType": {
+      "match": "^\\s*([A-Za-z_][A-Za-z0-9_]*)\\s+(String|Boolean|Int|BigInt|Float|Decimal|DateTime|Json|Bytes|[A-Za-z_][A-Za-z0-9_]*)\\b(\\[\\])?(\\?)?",
+      "captures": {
+        "1": { "name": "variable.other.field.ember" },
+        "2": { "name": "support.type.primitive.ember storage.type.ember" },
+        "3": { "name": "punctuation.definition.list.ember keyword.operator.list.ember" },
+        "4": { "name": "keyword.operator.optional.ember" }
+      }
+    },
+    "blockAttributes": {
+      "name": "storage.modifier.block-attribute.ember",
+      "match": "(@@)(id|unique|index|map|ignore)\\b",
+      "captures": {
+        "1": { "name": "punctuation.definition.block-attribute.ember" },
+        "2": { "name": "entity.name.function.block-attribute.ember keyword.ember" }
+      }
+    },
+    "attributes": {
+      "name": "storage.modifier.attribute.ember",
+      "match": "(@)(id|unique|default|map|relation|updatedAt|ignore|db)\\b(\\.[A-Za-z_][A-Za-z0-9_]*)?",
+      "captures": {
+        "1": { "name": "punctuation.definition.attribute.ember" },
+        "2": { "name": "entity.name.function.attribute.ember keyword.ember" },
+        "3": { "name": "support.type.native.ember" }
+      }
+    },
+    "functions": {
+      "name": "meta.function-call.ember",
+      "match": "\\b(autoincrement|now|uuid|cuid|env|dbgenerated)\\b(?=\\s*\\()",
+      "captures": {
+        "1": { "name": "support.function.ember entity.name.function.ember" }
+      }
+    },
+    "strings": {
+      "name": "string.quoted.double.ember",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        { "name": "constant.character.escape.ember", "match": "\\\\." }
+      ]
+    },
+    "numbers": {
+      "name": "constant.numeric.ember",
+      "match": "\\b-?[0-9]+(\\.[0-9]+)?\\b"
+    },
+    "constants": {
+      "patterns": [
+        { "name": "constant.language.boolean.ember", "match": "\\b(true|false)\\b" },
+        { "name": "constant.language.null.ember", "match": "\\bnull\\b" }
+      ]
+    }
+  }
+}

@@ -17,6 +17,11 @@
       "types": "./dist/client/index.d.ts",
       "import": "./dist/client/index.js",
       "require": "./dist/client/index.cjs"
+    },
+    "./editor": {
+      "types": "./dist/editor.d.ts",
+      "import": "./dist/editor.js",
+      "require": "./dist/editor.cjs"
     }
   },
   "bin": {
