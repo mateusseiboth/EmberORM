@@ -13,9 +13,8 @@ Current, honest status of the implementation.
 
 - **`updateMany`** is scalar-only (atomic operators allowed), like Prisma;
   nested relation writes are rejected with a clear error.
-- **`cursor`** supports a single unique field; multi-field cursors throw.
-- **`distinct`** de-duplicates in memory (and therefore paginates in memory),
-  rather than via a SQL window function.
+- **JSON `path` filters** are not supported on Firebird (no JSON SQL functions);
+  text-based JSON filters (`equals`/`not`/`string_*`) are. Path filtering throws.
 - **`createMany`** inserts row-by-row (one statement each) inside the
   transaction; it does not batch into a single multi-row INSERT.
 - Affected-row counts for `updateMany`/`deleteMany` come from a preceding
@@ -23,13 +22,14 @@ Current, honest status of the implementation.
 
 ## Roadmap
 
-1. Nested writes in `updateMany`.
-2. JSON path filters.
-3. SQL-window-function `distinct` and multi-field cursors.
-4. Optional native (Go/Rust) introspection/codegen behind the same interfaces.
+1. Generated column / UDF strategy for JSON path filtering.
+2. Optional native (Go/Rust) introspection/codegen behind the same interfaces.
 
 ## Recently completed
 
+- **JSON text filters**, **composite (multi-field) cursors** via lexicographic
+  keyset expansion, and **`distinct` via `ROW_NUMBER()`** on Firebird 3+
+  (in-memory fallback on 2.x).
 - **Firebird 2.1/2.5 support**: `SMALLINT` booleans and sequence+trigger
   autoincrement via a version-aware dialect (`?version=2.1`); secure **Srp** auth
   (default on FB3+) and legacy auth (`?auth=legacy`); query **logging** via the

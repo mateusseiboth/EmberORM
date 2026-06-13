@@ -25,6 +25,8 @@ export interface SqlDialect {
   readonly supportsBooleanType: boolean;
   /** IDENTITY columns (Firebird 3+) vs generator+trigger (2.1/2.5). */
   readonly supportsIdentity: boolean;
+  /** Window functions like ROW_NUMBER() OVER (...) (Firebird 3+). */
+  readonly supportsWindowFunctions: boolean;
   /** DDL type used for boolean columns. */
   booleanColumnType(): string;
 }
@@ -45,12 +47,14 @@ export class FirebirdDialect implements SqlDialect {
   readonly version: FirebirdVersion;
   readonly supportsBooleanType: boolean;
   readonly supportsIdentity: boolean;
+  readonly supportsWindowFunctions: boolean;
 
   constructor(options: FirebirdDialectOptions = {}) {
     this.version = options.version ?? "3";
     const rank = versionRank(this.version);
     this.supportsBooleanType = rank >= 30;
     this.supportsIdentity = rank >= 30;
+    this.supportsWindowFunctions = rank >= 30;
   }
 
   booleanColumnType(): string {

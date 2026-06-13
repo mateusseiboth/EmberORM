@@ -2,12 +2,13 @@ import {
   type FieldNode,
   type ModelNode,
   fieldColumn,
+  idFields,
   modelTable,
 } from "@ember/ast";
 import { QueryValidationError } from "@ember/errors";
 import { Sql, type SqlDialect } from "@ember/sql";
 import type { SqlValue } from "@ember/driver";
-import type { AggregateArgs, OrderByInput, WhereInput } from "./args";
+import type { AggregateArgs, OrderByInput, SortOrder, WhereInput } from "./args";
 import { compileOrderBy } from "./order";
 import { type CompileContext, compileWhere } from "./where";
 
@@ -72,6 +73,59 @@ export function compileFindMany(
   appendWhere(sql, model, options.where, ctx);
   const order = compileOrderBy(model, ROOT_ALIAS, options.orderBy, d);
   if (!order.isEmpty()) sql.push(" ORDER BY ").append(order);
+
+  return { sql, columns: projection };
+}
+
+/**
+ * SELECT ... with `distinct` pushed to SQL via ROW_NUMBER() (Firebird 3+).
+ * Keeps the first row per distinct-field tuple in `orderBy` order, then applies
+ * pagination on the outer query:
+ *
+ *   SELECT FIRST/SKIP <cols> FROM (
+ *     SELECT <cols>, ROW_NUMBER() OVER (PARTITION BY <distinct> ORDER BY <ord>) "__rn"
+ *     FROM <table> t0 [WHERE ...]
+ *   ) sub WHERE sub."__rn" = 1 [ORDER BY ...]
+ */
+export function compileDistinctFindMany(
+  model: ModelNode,
+  options: FindOptions,
+  projection: FieldNode[],
+  distinctFields: FieldNode[],
+  ctx: CompileContext,
+): SelectStatement {
+  const d = ctx.dialect;
+  const innerOrder = options.orderBy
+    ? compileOrderBy(model, ROOT_ALIAS, options.orderBy, d)
+    : defaultOrder(model, d);
+  const partitionBy = distinctFields
+    .map((f) => d.quoteRef(ROOT_ALIAS, fieldColumn(f)))
+    .join(", ");
+
+  const inner = new Sql();
+  const innerCols = projection.map(
+    (f) => `${d.quoteRef(ROOT_ALIAS, fieldColumn(f))} AS ${d.quoteId(f.name)}`,
+  );
+  inner.push(`SELECT ${innerCols.join(", ")}, ROW_NUMBER() OVER (PARTITION BY ${partitionBy} ORDER BY `);
+  inner.append(innerOrder);
+  inner.push(`) AS ${d.quoteId("__rn")}`);
+  inner.push(` FROM ${d.quoteId(modelTable(model))} ${d.quoteId(ROOT_ALIAS)}`);
+  appendWhere(inner, model, options.where, ctx);
+
+  const sql = new Sql();
+  const pagination = d.paginationClause(options.take, options.skip);
+  const sub = "sub";
+  const outerCols = projection
+    .map((f) => `${d.quoteRef(sub, f.name)} AS ${d.quoteId(f.name)}`)
+    .join(", ");
+  sql.push(pagination ? `SELECT ${pagination} ` : "SELECT ");
+  sql.push(outerCols);
+  sql.push(` FROM (`).append(inner).push(`) ${d.quoteId(sub)}`);
+  sql.push(` WHERE ${d.quoteRef(sub, "__rn")} = 1`);
+
+  // Re-apply ordering on the outer query (referencing the projected aliases).
+  const outerOrder = outerOrderBy(model, sub, options.orderBy, d);
+  if (!outerOrder.isEmpty()) sql.push(" ORDER BY ").append(outerOrder);
 
   return { sql, columns: projection };
 }
@@ -216,6 +270,38 @@ function appendWhere(
 ): void {
   const compiled = compileWhere(model, ROOT_ALIAS, where, ctx);
   if (!compiled.isEmpty()) sql.push(" WHERE ").append(compiled);
+}
+
+/** Deterministic default ordering (primary key, ascending) on the inner alias. */
+function defaultOrder(model: ModelNode, d: SqlDialect): Sql {
+  const ids = idFields(model);
+  const cols = (ids.length ? ids : model.fields.filter((f) => f.kind !== "object"))
+    .map((f) => `${d.quoteRef(ROOT_ALIAS, fieldColumn(f))} ASC`);
+  return Sql.raw(cols.join(", "));
+}
+
+/** ORDER BY for the outer distinct query, referencing projected name aliases. */
+function outerOrderBy(
+  model: ModelNode,
+  alias: string,
+  orderBy: OrderByInput | undefined,
+  d: SqlDialect,
+): Sql {
+  if (!orderBy) return new Sql();
+  const list = Array.isArray(orderBy) ? orderBy : [orderBy];
+  const parts: Sql[] = [];
+  for (const obj of list) {
+    for (const [name, dir] of Object.entries(obj)) {
+      if (dir !== "asc" && dir !== "desc") continue;
+      if (!model.fields.some((f) => f.name === name && f.kind !== "object")) {
+        continue;
+      }
+      parts.push(
+        Sql.raw(`${d.quoteRef(alias, name)} ${(dir as SortOrder) === "desc" ? "DESC" : "ASC"}`),
+      );
+    }
+  }
+  return Sql.join(parts, ", ");
 }
 
 function appendReturning(sql: Sql, d: SqlDialect, returning: FieldNode[]): void {

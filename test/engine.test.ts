@@ -147,7 +147,35 @@ describe("query engine reads", () => {
     expect(call.params).toContain(5);
   });
 
-  it("distinct de-duplicates in memory and paginates after", async () => {
+  it("composite cursor expands to a lexicographic keyset OR", async () => {
+    const driver = new MockDriver([
+      [/FROM "USERS"/, () => [{ id: 5, email: "e", name: "n" }]],
+    ]);
+    const engine = new QueryEngine(doc, dialect, driver);
+    await engine.findMany("User", { cursor: { name: "n", id: 5 }, take: 10 });
+    const call = driver.calls.find((c) => /FROM "USERS"/.test(c.sql))!;
+    // name > ? OR (name = ? AND id >= ?)
+    expect(call.sql).toContain(" OR ");
+    expect(call.sql).toContain('"t0"."NAME" > ?');
+    expect(call.sql).toContain('"t0"."ID" >= ?');
+    expect(call.params).toEqual(["n", "n", 5]);
+  });
+
+  it("distinct uses ROW_NUMBER() window on Firebird 3+", async () => {
+    const driver = new MockDriver([
+      [/ROW_NUMBER/, () => [{ id: 1, email: "a", name: "Dup" }]],
+    ]);
+    const engine = new QueryEngine(doc, dialect, driver);
+    await engine.findMany("User", { distinct: ["name"], take: 5 });
+    const call = driver.calls[0]!;
+    expect(call.sql).toContain("ROW_NUMBER() OVER (PARTITION BY");
+    expect(call.sql).toContain('"t0"."NAME"');
+    expect(call.sql).toContain('"__rn" = 1');
+    expect(call.sql).toContain("FIRST 5"); // pagination pushed to SQL
+  });
+
+  it("distinct de-duplicates in memory on Firebird 2.1", async () => {
+    const dialect21 = new FirebirdDialect({ version: "2.1" });
     const driver = new MockDriver([
       [
         /FROM "USERS"/,
@@ -158,11 +186,11 @@ describe("query engine reads", () => {
         ],
       ],
     ]);
-    const engine = new QueryEngine(doc, dialect, driver);
+    const engine = new QueryEngine(doc, dialect21, driver);
     const rows = await engine.findMany("User", { distinct: ["name"], take: 5 });
     expect(rows.map((r) => r.name)).toEqual(["Dup", "Other"]);
-    // distinct disables SQL pagination (done in memory instead)
     const call = driver.calls.find((c) => /FROM "USERS"/.test(c.sql))!;
+    expect(call.sql).not.toContain("ROW_NUMBER");
     expect(call.sql).not.toContain("FIRST");
   });
 });

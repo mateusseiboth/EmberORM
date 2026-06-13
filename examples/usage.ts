@@ -45,10 +45,11 @@ async function main() {
   const emails = await db.user.findMany({ select: { id: true, email: true } });
   emails.forEach((e) => e.email.length);
 
-  // cursor-based pagination + distinct
+  // composite cursor keyset pagination + distinct + JSON text filter
   const page = await db.user.findMany({
-    cursor: { id: 100 },
-    orderBy: { id: "asc" },
+    where: { meta: { string_contains: "premium" } },
+    cursor: { createdAt: new Date(), id: 100 },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: 25,
     distinct: ["email"],
   });

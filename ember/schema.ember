@@ -20,6 +20,7 @@ model User {
   name      String?  @db.VarChar(120)
   role      Role     @default(USER)
   active    Boolean  @default(true)
+  meta      Json?
   createdAt DateTime @default(now()) @map("CREATED_AT")
   posts     Post[]
   profile   Profile?

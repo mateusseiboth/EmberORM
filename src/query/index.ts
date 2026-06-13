@@ -7,6 +7,7 @@ export { compileWhere, type CompileContext } from "./where";
 export { compileOrderBy } from "./order";
 export {
   compileFindMany,
+  compileDistinctFindMany,
   compileCount,
   compileAggregate,
   compileGroupBy,

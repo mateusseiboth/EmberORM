@@ -38,6 +38,7 @@ import {
   compileAggregate,
   compileCount,
   compileDelete,
+  compileDistinctFindMany,
   compileFindMany,
   compileGroupBy,
   newContext,
@@ -259,9 +260,11 @@ export class QueryEngine {
     const countFields = this.readCountRelations(model, args.select, args.include);
     const selectedScalars = selectedScalarNames(model, args.select);
     const distinctFields = normalizeDistinct(model, args.distinct);
-    // `distinct` is de-duplicated in memory, so pagination cannot be pushed to
-    // SQL in that case (it would slice before de-duplication).
-    const memoryPaginate = distinctFields.length > 0;
+    // On Firebird 3+ `distinct` is pushed to SQL via ROW_NUMBER(); on 2.x it is
+    // de-duplicated in memory (and pagination is therefore also done in memory).
+    const useWindowDistinct =
+      distinctFields.length > 0 && this.dialect.supportsWindowFunctions;
+    const memoryPaginate = distinctFields.length > 0 && !useWindowDistinct;
 
     // `cursor` augments the filter/order so SQL can start at the cursor row.
     const { where, orderBy } = applyCursor(model, args, distinctFields);
@@ -282,17 +285,26 @@ export class QueryEngine {
     ]);
     const projection = projectionNames.map((n) => fieldByName(model, n));
 
-    const stmt = compileFindMany(
-      model,
-      {
-        where,
-        orderBy,
-        take: memoryPaginate ? undefined : args.take,
-        skip: memoryPaginate ? undefined : args.skip,
-      },
-      projection,
-      newContext(this.schema, this.dialect),
-    );
+    const findOptions = {
+      where,
+      orderBy,
+      take: memoryPaginate ? undefined : args.take,
+      skip: memoryPaginate ? undefined : args.skip,
+    };
+    const stmt = useWindowDistinct
+      ? compileDistinctFindMany(
+          model,
+          findOptions,
+          projection,
+          distinctFields.map((n) => fieldByName(model, n)),
+          newContext(this.schema, this.dialect),
+        )
+      : compileFindMany(
+          model,
+          findOptions,
+          projection,
+          newContext(this.schema, this.dialect),
+        );
     const rawRows = await exec(stmt.sql);
     let rows = rawRows.map((r) => coerceRow(r, projection));
 
@@ -670,10 +682,18 @@ function dedupeBy(
   return out;
 }
 
+interface CursorField {
+  name: string;
+  value: unknown;
+  direction: SortOrder;
+}
+
 /**
  * Translate a `cursor` into an extra filter + ordering so SQL starts at the
- * cursor row. Supports a single cursor field (the common case); the ordering
- * direction is taken from `orderBy` on that field, defaulting to ascending.
+ * cursor row. Supports composite cursors via a lexicographic keyset expansion:
+ * for ordered fields (f1..fn) the condition is `(f1..fn) >= (v1..vn)` relative
+ * to each field's direction, expanded into an OR of AND-ed comparisons so it
+ * works without row-value comparisons (which Firebird lacks).
  */
 function applyCursor(
   model: ModelNode,
@@ -685,26 +705,45 @@ function applyCursor(
   }
   const entries = Object.entries(args.cursor).filter(([, v]) => v !== undefined);
   if (entries.length === 0) return { where: args.where, orderBy: args.orderBy };
-  if (entries.length > 1) {
-    throw new QueryValidationError(
-      `Multi-field cursors are not supported (got ${entries.map(([k]) => k).join(", ")}).`,
-    );
-  }
-  const [field, value] = entries[0]!;
-  if (!model.fields.some((f) => f.name === field && f.kind !== "object")) {
-    throw new QueryValidationError(
-      `Cursor field '${model.name}.${field}' must be a scalar field.`,
-    );
-  }
-  const direction = directionForField(args.orderBy, field) ?? "asc";
-  const cursorCond: WhereInput = {
-    [field]: direction === "desc" ? { lte: value } : { gte: value },
-  };
+
+  const fields: CursorField[] = entries.map(([name, value]) => {
+    if (!model.fields.some((f) => f.name === name && f.kind !== "object")) {
+      throw new QueryValidationError(
+        `Cursor field '${model.name}.${name}' must be a scalar field.`,
+      );
+    }
+    return { name, value, direction: directionForField(args.orderBy, name) ?? "asc" };
+  });
+
+  const cursorCond = keysetCondition(fields);
   const where: WhereInput = args.where
     ? { AND: [args.where, cursorCond] }
     : cursorCond;
-  const orderBy = args.orderBy ?? { [field]: direction };
+  const orderBy =
+    args.orderBy ?? fields.map((f) => ({ [f.name]: f.direction }));
   return { where, orderBy };
+}
+
+/** Lexicographic `>=`/`<=` keyset comparison expanded to an OR of AND groups. */
+function keysetCondition(fields: CursorField[]): WhereInput {
+  const clauses: WhereInput[] = [];
+  for (let i = 0; i < fields.length; i++) {
+    const clause: WhereInput = {};
+    for (let j = 0; j < i; j++) {
+      clause[fields[j]!.name] = fields[j]!.value;
+    }
+    const last = i === fields.length - 1;
+    const f = fields[i]!;
+    const op = comparator(f.direction, last);
+    clause[f.name] = { [op]: f.value };
+    clauses.push(clause);
+  }
+  return clauses.length === 1 ? clauses[0]! : { OR: clauses };
+}
+
+function comparator(direction: SortOrder, inclusive: boolean): string {
+  if (direction === "desc") return inclusive ? "lte" : "lt";
+  return inclusive ? "gte" : "gt";
 }
 
 function directionForField(

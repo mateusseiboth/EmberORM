@@ -537,7 +537,17 @@ export type DateTimeFilter = {
 };
 
 export type BytesFilter = { equals?: Buffer; not?: Buffer };
-export type JsonFilter = { equals?: JsonValue; not?: JsonValue };`;
+
+// Firebird has no JSON SQL functions: filters operate on the serialized text.
+// 'path' is accepted by the type but rejected at runtime on Firebird.
+export type JsonFilter = {
+  equals?: JsonValue;
+  not?: JsonValue;
+  string_contains?: string;
+  string_starts_with?: string;
+  string_ends_with?: string;
+  path?: string[];
+};`;
 
 function isGeneratedOnCreate(field: FieldNode): boolean {
   return field.default?.function?.name === "autoincrement";

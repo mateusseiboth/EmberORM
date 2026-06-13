@@ -122,6 +122,11 @@ function compileScalar(
 ): Sql {
   const ref = ctx.dialect.quoteRef(tableAlias, fieldColumn(field));
 
+  // JSON fields are stored as text; filter on the serialized representation.
+  if (field.type === "Json" && isJsonFilterObject(value)) {
+    return compileJsonFilter(ref, field, value as Record<string, unknown>, ctx);
+  }
+
   // Direct value shorthand: `{ field: value }` == `{ field: { equals: value } }`.
   if (!isFilterObject(value)) {
     if (value === null) return Sql.raw(`${ref} IS NULL`);
@@ -139,6 +144,81 @@ function compileScalar(
   }
   if (parts.length === 0) return new Sql();
   return wrapAnd(parts);
+}
+
+const JSON_OPERATORS = new Set([
+  "equals",
+  "not",
+  "string_contains",
+  "string_starts_with",
+  "string_ends_with",
+  "path",
+]);
+
+function isJsonFilterObject(value: unknown): boolean {
+  return (
+    isPlainObject(value) &&
+    Object.keys(value).some((k) => JSON_OPERATORS.has(k))
+  );
+}
+
+/**
+ * Filter a Json field. Firebird has no JSON SQL functions, so filtering works
+ * on the serialized text: `equals`/`not` compare the stored JSON string and
+ * `string_contains`/`string_starts_with`/`string_ends_with` use LIKE. The
+ * `path` operator is rejected (no JSON path support in Firebird).
+ */
+function compileJsonFilter(
+  ref: string,
+  field: FieldNode,
+  filter: Record<string, unknown>,
+  ctx: CompileContext,
+): Sql {
+  const parts: Sql[] = [];
+  for (const [op, raw] of Object.entries(filter)) {
+    if (raw === undefined) continue;
+    switch (op) {
+      case "path":
+        throw new QueryValidationError(
+          `JSON 'path' filtering is not supported on Firebird (no JSON SQL functions). ` +
+            `Filter '${field.name}' in application code or with a generated column.`,
+        );
+      case "equals":
+        parts.push(
+          raw === null
+            ? Sql.raw(`${ref} IS NULL`)
+            : new Sql().push(`${ref} = `).bind(jsonText(raw)),
+        );
+        break;
+      case "not":
+        parts.push(
+          raw === null
+            ? Sql.raw(`${ref} IS NOT NULL`)
+            : new Sql().push(`${ref} <> `).bind(jsonText(raw)),
+        );
+        break;
+      case "string_contains":
+        parts.push(jsonLike(ref, `%${escapeLike(String(raw))}%`));
+        break;
+      case "string_starts_with":
+        parts.push(jsonLike(ref, `${escapeLike(String(raw))}%`));
+        break;
+      case "string_ends_with":
+        parts.push(jsonLike(ref, `%${escapeLike(String(raw))}`));
+        break;
+      default:
+        throw new QueryValidationError(`Unsupported JSON filter operator '${op}'.`);
+    }
+  }
+  return parts.length ? wrapAnd(parts) : new Sql();
+}
+
+function jsonText(value: unknown): string {
+  return typeof value === "string" ? value : JSON.stringify(value);
+}
+
+function jsonLike(ref: string, pattern: string): Sql {
+  return new Sql().push(`${ref} LIKE `).bind(pattern).push(" ESCAPE '\\'");
 }
 
 function compileOperator(

@@ -20,6 +20,7 @@ const SCHEMA = `model User {
   name   String?
   age    Int     @default(0)
   active Boolean @default(true)
+  meta   Json?
   posts  Post[]
   @@map("USERS")
 }
@@ -76,6 +77,22 @@ describe("where compiler", () => {
   it("turns IN ([]) into a false predicate", () => {
     const sql = compileWhere(User, "t0", { id: { in: [] } }, ctx());
     expect(sql.text).toBe("1 = 0");
+  });
+
+  it("compiles JSON text filters (equals / string_contains)", () => {
+    const eq = compileWhere(User, "t0", { meta: { equals: { a: 1 } } }, ctx());
+    expect(eq.text).toBe(`"t0"."META" = ?`);
+    expect(eq.params).toEqual(['{"a":1}']);
+
+    const like = compileWhere(User, "t0", { meta: { string_contains: "x" } }, ctx());
+    expect(like.text).toContain(`"t0"."META" LIKE`);
+    expect(like.params).toEqual(["%x%"]);
+  });
+
+  it("rejects JSON path filtering on Firebird", () => {
+    expect(() =>
+      compileWhere(User, "t0", { meta: { path: ["a", "b"], equals: 1 } }, ctx()),
+    ).toThrowError(/path.*not supported on Firebird/i);
   });
 });
 

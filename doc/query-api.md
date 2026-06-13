@@ -26,13 +26,14 @@ db.user.findUniqueOrThrow({ where });
 `include` keeps all scalars and adds relations. Both narrow the **static type**
 of the result in the generated client.
 
-**`cursor`** takes a single unique scalar field (`{ id: 100 }`). It adds a
-`>=`/`<=` filter relative to the ordering on that field (ascending by default,
-or the direction from `orderBy`) and orders by it, so SQL starts at the cursor
-row; combine with `skip`/`take`. **`distinct`** de-duplicates on the listed
-scalar fields, keeping the first row per combination in the current order;
-because de-duplication happens in memory, `take`/`skip` are also applied in
-memory when `distinct` is used.
+**`cursor`** accepts one or more scalar fields (`{ id: 100 }` or
+`{ createdAt, id }`). It expands to a lexicographic keyset comparison
+(`(f1..fn) >=/<= (v1..vn)` per each field's `orderBy` direction, default asc) as
+an `OR` of `AND` groups, so SQL starts at the cursor row; combine with
+`skip`/`take`. **`distinct`** de-duplicates on the listed scalar fields. On
+Firebird 3+ it is pushed to SQL with `ROW_NUMBER() OVER (PARTITION BY …)` and
+pagination stays in SQL; on Firebird 2.1/2.5 it de-duplicates (and paginates) in
+memory.
 
 ## Filtering (`where`)
 
@@ -59,6 +60,22 @@ Operators: `equals`, `not`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`,
 `contains`, `startsWith`, `endsWith`, `mode: "insensitive"`.
 Relation operators: `some`, `every`, `none` (to-many); `is`, `isNot` (to-one).
 `contains/startsWith/endsWith` escape `% _ \` and emit `LIKE ... ESCAPE '\'`.
+
+### JSON filters
+
+`Json` fields are stored as text (Firebird has no JSON type). Supported filters
+operate on the serialized value:
+
+```ts
+{ meta: { equals: { plan: "pro" } } }       // exact serialized match
+{ meta: { not: null } }
+{ meta: { string_contains: "premium" } }    // LIKE on the JSON text
+{ meta: { string_starts_with: "{" } }
+{ meta: { string_ends_with: "}" } }
+```
+
+`path`-based filtering is **not supported** on Firebird (no JSON SQL functions)
+and throws a clear error — filter in application code or via a generated column.
 
 ## Writes
 
