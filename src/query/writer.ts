@@ -12,10 +12,12 @@ import type { SqlValue } from "@ember/driver";
 import { isPlainObject } from "@ember/utils";
 import type { WhereInput } from "./args";
 import {
+  type ColumnUpdate,
   compileDelete,
   compileInsert,
   compileUpdate,
   newContext,
+  setAssignments,
 } from "./compiler";
 import { type CompileContext, compileWhere } from "./where";
 import {
@@ -94,7 +96,7 @@ export class WriteProcessor {
     }
 
     const withDefaults = applyUpdateDefaults(model, recordOf(scalars));
-    const assignments = this.toColumnMap(model, withDefaults);
+    const assignments = this.toUpdateColumnMap(model, withDefaults);
 
     if (assignments.size > 0) {
       const stmt = compileUpdate(model, where, assignments, this.ctx());
@@ -130,7 +132,9 @@ export class WriteProcessor {
         );
       }
       if (field.kind !== "object") {
-        scalars.set(key, isUpdate ? unwrapUpdateScalar(value) : value);
+        // For updates the raw value is preserved so atomic operators
+        // ({ increment }, { set }, ...) can be interpreted later.
+        scalars.set(key, value);
         continue;
       }
       if (!isPlainObject(value)) {
@@ -159,6 +163,37 @@ export class WriteProcessor {
       out.set(fieldColumn(field), this.dialect.coerceValue(value));
     }
     return out;
+  }
+
+  /**
+   * Build UPDATE assignments, interpreting atomic scalar operators:
+   * `{ set }`, `{ increment }`, `{ decrement }`, `{ multiply }`, `{ divide }`.
+   * A bare value is a plain `set`.
+   */
+  private toUpdateColumnMap(
+    model: ModelNode,
+    record: Record<string, unknown>,
+  ): Map<string, ColumnUpdate> {
+    const out = new Map<string, ColumnUpdate>();
+    for (const [name, value] of Object.entries(record)) {
+      const field = model.fields.find((f) => f.name === name);
+      if (!field || field.kind === "object") continue;
+      out.set(fieldColumn(field), this.toColumnUpdate(field, value));
+    }
+    return out;
+  }
+
+  private toColumnUpdate(field: FieldNode, value: unknown): ColumnUpdate {
+    const coerce = (v: unknown): SqlValue => this.dialect.coerceValue(v);
+    if (isPlainObject(value)) {
+      if ("set" in value) return { kind: "set", value: coerce(value.set) };
+      const arith = ARITH_OPS.find((op) => op.key in value);
+      if (arith) {
+        requireNumeric(field, arith.key);
+        return { kind: "arith", op: arith.op, value: coerce(value[arith.key]) };
+      }
+    }
+    return { kind: "set", value: coerce(value) };
   }
 
   private keyValues(
@@ -315,7 +350,7 @@ export class WriteProcessor {
     where: WhereInput,
     fkColumns: [string, SqlValue][],
   ): Promise<void> {
-    const assignments = new Map<string, SqlValue>(fkColumns);
+    const assignments = setAssignments(new Map<string, SqlValue>(fkColumns));
     const stmt = compileUpdate(rel.relatedModel, where, assignments, this.ctx());
     await this.exec(stmt.sql);
   }
@@ -329,11 +364,30 @@ export class WriteProcessor {
       const fromField = rel.fromFields[i]!;
       matchWhere[toField] = parentKeys[fromField];
     });
-    const assignments = new Map<string, SqlValue>(
-      rel.toColumns.map((c) => [c, null] as [string, SqlValue]),
+    const assignments = setAssignments(
+      new Map<string, SqlValue>(
+        rel.toColumns.map((c) => [c, null] as [string, SqlValue]),
+      ),
     );
     const stmt = compileUpdate(rel.relatedModel, matchWhere, assignments, this.ctx());
     await this.exec(stmt.sql);
+  }
+}
+
+const ARITH_OPS = [
+  { key: "increment", op: "+" as const },
+  { key: "decrement", op: "-" as const },
+  { key: "multiply", op: "*" as const },
+  { key: "divide", op: "/" as const },
+];
+
+const NUMERIC_TYPES = new Set(["Int", "BigInt", "Float", "Decimal"]);
+
+function requireNumeric(field: FieldNode, op: string): void {
+  if (!NUMERIC_TYPES.has(field.type)) {
+    throw new QueryValidationError(
+      `Operator '${op}' is only valid on numeric fields, not '${field.name}' (${field.type}).`,
+    );
   }
 }
 
@@ -363,13 +417,6 @@ function recordOf(scalars: Map<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [k, v] of scalars) out[k] = v;
   return out;
-}
-
-/** Unwrap `{ set: x }` scalar update operations to a direct value. */
-function unwrapUpdateScalar(value: unknown): unknown {
-  if (!isPlainObject(value)) return value;
-  if ("set" in value) return value.set;
-  return value;
 }
 
 function toArray<T = Record<string, unknown>>(value: unknown): T[] {

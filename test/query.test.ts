@@ -112,12 +112,24 @@ describe("statement compiler", () => {
   });
 
   it("compiles UPDATE with alias and WHERE", () => {
-    const set = new Map<string, any>([["NAME", "Bob"]]);
+    const set = new Map<string, any>([["NAME", { kind: "set", value: "Bob" }]]);
     const stmt = compileUpdate(User, { id: 1 }, set, ctx());
     expect(stmt.sql.text).toBe(
       'UPDATE "USERS" "t0" SET "NAME" = ? WHERE "t0"."ID" = ?',
     );
     expect(stmt.sql.params).toEqual(["Bob", 1]);
+  });
+
+  it("compiles atomic arithmetic UPDATE assignments", () => {
+    const set = new Map<string, any>([
+      ["AGE", { kind: "arith", op: "+", value: 5 }],
+      ["NAME", { kind: "set", value: "Z" }],
+    ]);
+    const stmt = compileUpdate(User, { id: 1 }, set, ctx());
+    expect(stmt.sql.text).toBe(
+      'UPDATE "USERS" "t0" SET "AGE" = "AGE" + ?, "NAME" = ? WHERE "t0"."ID" = ?',
+    );
+    expect(stmt.sql.params).toEqual([5, "Z", 1]);
   });
 
   it("compiles DELETE", () => {

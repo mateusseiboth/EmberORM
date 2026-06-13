@@ -70,8 +70,18 @@ db.user.deleteMany({ where });
 - **Child side** (one-to-many / back relation) — written *after* the parent:
   `create`, `connect`, `set`, `disconnect`, `delete`.
 
-Scalar update operators currently support `{ set: value }` and direct
-assignment.
+### Scalar update operators
+
+Direct assignment, `{ set }`, and on numeric fields the atomic operators
+`increment` / `decrement` / `multiply` / `divide` (compiled to
+`"COL" = "COL" <op> ?`):
+
+```ts
+db.post.update({
+  where: { id },
+  data: { views: { increment: 1 }, score: { multiply: 2 }, title: { set: "x" } },
+});
+```
 
 ## Aggregation
 

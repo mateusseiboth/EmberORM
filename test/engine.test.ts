@@ -149,4 +149,39 @@ describe("query engine writes", () => {
     expect(insertCall.sql).toContain('"AUTHOR_ID"');
     expect(insertCall.params).toContain(7);
   });
+
+  it("update emits atomic numeric operators as col = col <op> ?", async () => {
+    const counterSchema = parseSchema(`model Counter {
+      id    Int @id
+      views Int @default(0)
+      score Int @default(0)
+    }`);
+    const driver = new MockDriver([
+      [/FROM "COUNTER"/, () => [{ id: 1, views: 10, score: 4 }]],
+      [/UPDATE "COUNTER"/, () => []],
+    ]);
+    const engine = new QueryEngine(counterSchema, dialect, driver);
+    await engine.update("Counter", {
+      where: { id: 1 },
+      data: { views: { increment: 3 }, score: { set: 0 } },
+    });
+    const updateCall = driver.calls.find((c) => /UPDATE "COUNTER"/.test(c.sql))!;
+    expect(updateCall.sql).toContain('"VIEWS" = "VIEWS" + ?');
+    expect(updateCall.sql).toContain('"SCORE" = ?');
+    expect(updateCall.params.slice(0, 2)).toEqual([3, 0]);
+  });
+
+  it("rejects an atomic operator on a non-numeric field", async () => {
+    const driver = new MockDriver([
+      [/FROM "USERS"/, () => [{ id: 1, email: "a", name: "n" }]],
+      [/UPDATE "USERS"/, () => []],
+    ]);
+    const engine = new QueryEngine(doc, dialect, driver);
+    await expect(
+      engine.update("User", {
+        where: { id: 1 },
+        data: { name: { increment: 1 } as any },
+      }),
+    ).rejects.toThrow(/only valid on numeric/i);
+  });
 });

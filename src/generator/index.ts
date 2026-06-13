@@ -213,7 +213,7 @@ ${include || "  [k: string]: never;"}
       (f) => `  ${f.name}?: ${this.nestedCreate(f)};`,
     );
     const updateScalars = scalarFields(model).map(
-      (f) => `  ${f.name}?: ${this.inputScalarType(f)};`,
+      (f) => `  ${f.name}?: ${this.updateScalarType(f)};`,
     );
     const updateRelations = relationFields(model).map(
       (f) => `  ${f.name}?: ${this.nestedUpdate(f)};`,
@@ -232,6 +232,21 @@ ${[...updateScalars, ...updateRelations].join("\n")}
     const base = baseTsType(field, this.schema);
     if (field.isList) return `${base}[]`;
     return field.isRequired ? base : `${base} | null`;
+  }
+
+  /**
+   * Update value for a scalar field: a bare value, `{ set }`, and — for numeric
+   * fields — the atomic operators increment/decrement/multiply/divide.
+   */
+  private updateScalarType(field: FieldNode): string {
+    const value = this.inputScalarType(field);
+    if (field.isList) return value;
+    const base = baseTsType(field, this.schema);
+    if (NUMERIC_SCALARS.has(field.type)) {
+      const nullable = field.isRequired ? "" : " | null";
+      return `${value} | { set?: ${base}${nullable}; increment?: ${base}; decrement?: ${base}; multiply?: ${base}; divide?: ${base} }`;
+    }
+    return `${value} | { set?: ${value} }`;
   }
 
   private nestedCreate(field: FieldNode): string {
@@ -373,6 +388,8 @@ export function writeClient(schema: SchemaDocument, outDir: string): string {
 }
 
 // ---- static template fragments -------------------------------------------
+
+const NUMERIC_SCALARS = new Set(["Int", "BigInt", "Float", "Decimal"]);
 
 const FILTER_FOR_SCALAR: Record<string, string> = {
   String: "StringFilter",

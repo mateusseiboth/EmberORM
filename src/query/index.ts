@@ -13,7 +13,9 @@ export {
   compileInsert,
   compileUpdate,
   compileDelete,
+  setAssignments,
   type SelectStatement,
+  type ColumnUpdate,
 } from "./compiler";
 export { coerceFromDb, coerceRow } from "./coerce";
 export { applyCreateDefaults, applyUpdateDefaults } from "./defaults";

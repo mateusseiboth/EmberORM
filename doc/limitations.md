@@ -17,8 +17,6 @@ Current, honest status of the implementation.
   reproduced.
 - **`updateMany` with nested writes**: only scalar fields are applied to the
   matched set; nested relation writes in `updateMany` are not processed.
-- **Scalar update operators**: `{ set }` and direct assignment are supported;
-  `increment/decrement/multiply/divide` are not yet emitted as `col = col + ?`.
 - **`cursor`/`distinct`** are accepted in args but not yet pushed into SQL.
 - **Migrations** (`ember db push`/`migrate`) are not implemented — there is no
   migration engine. Use `db pull` against an externally-managed schema.
@@ -29,10 +27,9 @@ Current, honest status of the implementation.
 
 ## Roadmap
 
-1. Full `GetPayload` select narrowing in the generator.
-2. Numeric atomic update operators and JSON path filters.
-3. `cursor`/`distinct` pushdown.
-4. Optional native (Go/Rust) introspection/codegen behind the same interfaces.
+1. JSON path filters.
+2. `cursor`/`distinct` pushdown.
+3. Optional native (Go/Rust) introspection/codegen behind the same interfaces.
 
 ## Recently completed
 

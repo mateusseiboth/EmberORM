@@ -57,6 +57,12 @@ async function main() {
     _sum: { views: true },
   });
 
+  // atomic numeric update operators
+  await db.post.update({
+    where: { id: 1 },
+    data: { views: { increment: 1 }, published: { set: true } },
+  });
+
   // transaction (interactive): all ops share one transaction
   await db.$transaction(async (tx) => {
     await tx.user.update({ where: { id: user.id }, data: { name: "Ada L." } });

@@ -17,6 +17,24 @@ export interface SelectStatement {
   columns: FieldNode[];
 }
 
+/**
+ * A single column assignment in an UPDATE. `set` binds a literal value;
+ * `arith` produces `"COL" = "COL" <op> ?` for atomic numeric operators
+ * (increment/decrement/multiply/divide).
+ */
+export type ColumnUpdate =
+  | { kind: "set"; value: SqlValue }
+  | { kind: "arith"; op: "+" | "-" | "*" | "/"; value: SqlValue };
+
+/** Wrap a plain column→value map as a set-only ColumnUpdate map. */
+export function setAssignments(
+  values: Map<string, SqlValue>,
+): Map<string, ColumnUpdate> {
+  const out = new Map<string, ColumnUpdate>();
+  for (const [col, value] of values) out.set(col, { kind: "set", value });
+  return out;
+}
+
 const ROOT_ALIAS = "t0";
 
 export function newContext(
@@ -145,7 +163,7 @@ export function compileInsert(
 export function compileUpdate(
   model: ModelNode,
   where: WhereInput | undefined,
-  assignments: Map<string, SqlValue>,
+  assignments: Map<string, ColumnUpdate>,
   ctx: CompileContext,
   returning?: FieldNode[],
 ): SelectStatement {
@@ -158,7 +176,13 @@ export function compileUpdate(
   const cols = [...assignments.keys()];
   cols.forEach((col, i) => {
     if (i > 0) sql.push(", ");
-    sql.push(`${d.quoteId(col)} = `).bind(assignments.get(col)!);
+    const assignment = assignments.get(col)!;
+    const quoted = d.quoteId(col);
+    if (assignment.kind === "arith") {
+      sql.push(`${quoted} = ${quoted} ${assignment.op} `).bind(assignment.value);
+    } else {
+      sql.push(`${quoted} = `).bind(assignment.value);
+    }
   });
   appendWhere(sql, model, where, ctx);
   if (returning) appendReturning(sql, d, returning);
