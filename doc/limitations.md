@@ -11,10 +11,6 @@ Current, honest status of the implementation.
 
 ## Known limitations
 
-- **Type-level select/include narrowing** in the generated client is pragmatic:
-  `include` adds the relation types; `select` maps to the selected keys' full
-  types. The full Prisma conditional `GetPayload` (deep nested narrowing) is not
-  reproduced.
 - **`updateMany` with nested writes**: only scalar fields are applied to the
   matched set; nested relation writes in `updateMany` are not processed.
 - **`cursor`/`distinct`** are accepted in args but not yet pushed into SQL.
@@ -33,6 +29,14 @@ Current, honest status of the implementation.
 
 ## Recently completed
 
+- **Recursive `GetPayload`**: the generated client narrows `select`/`include`
+  to arbitrary depth via a type-level registry (`$ScalarPayload`/`$RelationMap`)
+  and a generic `$Payload<Model, Args>` resolver — nested relation selects,
+  list-ness, and to-one nullability are all reflected in the result type.
+  Verified by compile-time `@ts-expect-error` assertions in
+  `examples/payload-types.ts`.
+- **Atomic numeric update operators** (`increment`/`decrement`/`multiply`/
+  `divide`) compiled to `"COL" = "COL" <op> ?`.
 - **Composite-key relations** in `include`/`select`: parent key tuples are
   matched with `IN (...)` for single-column keys and an `OR` of AND-ed equality
   groups for composite keys (Firebird lacks a portable row-value `IN`). Nested

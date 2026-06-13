@@ -27,6 +27,8 @@ export class ClientGenerator {
     parts.push(this.header());
     parts.push(this.enums());
     parts.push(this.modelTypes());
+    parts.push(this.registry());
+    parts.push(PAYLOAD_RESOLVER);
     parts.push(this.namespace());
     parts.push(this.clientClass());
     return parts.filter(Boolean).join("\n\n") + "\n";
@@ -72,38 +74,54 @@ export type ${node.name} = (typeof ${node.name})[keyof typeof ${node.name}];`;
     const scalars = scalarFields(model)
       .map((f) => `  ${f.name}: ${this.scalarType(f)};`)
       .join("\n");
-    const relations = relationFields(model)
-      .map((f) => `  ${f.name}: ${this.relationType(f)};`)
-      .join("\n");
 
     const lines: string[] = [];
+    // Public model type is scalar-only; relations are resolved per-query.
     lines.push(`export type ${model.name} = {\n${scalars}\n};`);
-    lines.push(
-      relations
-        ? `export type ${model.name}RelationFields = {\n${relations}\n};`
-        : `export type ${model.name}RelationFields = {};`,
-    );
-    lines.push(
-      `export type ${model.name}Full = ${model.name} & ${model.name}RelationFields;`,
-    );
-    lines.push(`export type ${model.name}GetPayload<A> =
-  A extends { select: infer S }
-    ? { [K in keyof S & keyof ${model.name}Full]: ${model.name}Full[K] }
-    : A extends { include: infer I }
-      ? ${model.name} & { [K in keyof I & keyof ${model.name}RelationFields]: ${model.name}RelationFields[K] }
-      : ${model.name};`);
+    // Recursive payload resolver (handles nested select/include narrowing).
+    lines.push(`export type ${model.name}GetPayload<A> = $Payload<"${model.name}", A>;`);
     return lines.join("\n");
+  }
+
+  /**
+   * Type-level registry powering recursive payload resolution: a model-name
+   * union, a scalar-payload map, and a relation map carrying each relation's
+   * target model, list-ness and nullability.
+   */
+  private registry(): string {
+    const names = this.schema.models.map((m) => `"${m.name}"`).join(" | ");
+
+    const scalarEntries = this.schema.models
+      .map((m) => `  ${m.name}: ${m.name};`)
+      .join("\n");
+
+    const relationEntries = this.schema.models
+      .map((m) => {
+        const rels = relationFields(m)
+          .map((f) => {
+            const nullable = !f.isList && !f.isRequired ? "; isNullable: true" : "";
+            return `    ${f.name}: { model: "${f.type}"; isList: ${f.isList}${nullable} }`;
+          })
+          .join(";\n");
+        return `  ${m.name}: {${rels ? `\n${rels}\n  ` : ""}};`;
+      })
+      .join("\n");
+
+    return `export type $ModelName = ${names || "never"};
+
+export interface $ScalarPayload {
+${scalarEntries}
+}
+
+export interface $RelationMap {
+${relationEntries}
+}`;
   }
 
   private scalarType(field: FieldNode): string {
     const base = baseTsType(field, this.schema);
     if (field.isList) return `${base}[]`;
     return field.isRequired ? base : `${base} | null`;
-  }
-
-  private relationType(field: FieldNode): string {
-    if (field.isList) return `${field.type}[]`;
-    return field.isRequired ? field.type : `${field.type} | null`;
   }
 
   // ---- input types (Prisma namespace) -------------------------------------
@@ -388,6 +406,46 @@ export function writeClient(schema: SchemaDocument, outDir: string): string {
 }
 
 // ---- static template fragments -------------------------------------------
+
+/**
+ * Generic, recursive payload resolver shared by every model's GetPayload.
+ * Resolves nested `select`/`include` narrowing to arbitrary depth using the
+ * `$ScalarPayload` / `$RelationMap` registries emitted per schema.
+ */
+const PAYLOAD_RESOLVER = `type $Scalar<M extends $ModelName> = $ScalarPayload[M];
+type $Relations<M extends $ModelName> = M extends keyof $RelationMap
+  ? $RelationMap[M]
+  : {};
+
+// A relation sub-arg may be \`true\` (full payload) or a nested args object.
+type $NormalizeArgs<Sub> = Sub extends object ? Sub : {};
+
+type $RelationResult<Info, Sub> = Info extends {
+  model: infer RM extends $ModelName;
+  isList: infer L;
+}
+  ? L extends true
+    ? $Payload<RM, $NormalizeArgs<Sub>>[]
+    : Info extends { isNullable: true }
+      ? $Payload<RM, $NormalizeArgs<Sub>> | null
+      : $Payload<RM, $NormalizeArgs<Sub>>
+  : never;
+
+type $SelectResult<M extends $ModelName, S> = {
+  [K in keyof S & keyof $Scalar<M>]: $Scalar<M>[K];
+} & {
+  [K in keyof S & keyof $Relations<M>]: $RelationResult<$Relations<M>[K], S[K]>;
+};
+
+type $IncludeResult<M extends $ModelName, I> = {
+  [K in keyof I & keyof $Relations<M>]: $RelationResult<$Relations<M>[K], I[K]>;
+};
+
+export type $Payload<M extends $ModelName, A> = A extends { select: infer S }
+  ? $SelectResult<M, S>
+  : A extends { include: infer I }
+    ? $Scalar<M> & $IncludeResult<M, I>
+    : $Scalar<M>;`;
 
 const NUMERIC_SCALARS = new Set(["Int", "BigInt", "Float", "Decimal"]);
 
