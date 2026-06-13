@@ -1,0 +1,58 @@
+{
+  "name": "ember-orm",
+  "version": "0.1.0",
+  "description": "Prisma-like ORM for Firebird. Schema, db pull, generated types, typed query API.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./client": {
+      "types": "./dist/client/index.d.ts",
+      "import": "./dist/client/index.js",
+      "require": "./dist/client/index.cjs"
+    }
+  },
+  "bin": {
+    "ember": "./dist/cli/bin.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "ember": "tsx src/cli/bin.ts"
+  },
+  "keywords": [
+    "firebird",
+    "orm",
+    "prisma",
+    "sql",
+    "typescript",
+    "database"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "node-firebird": "^1.1.9"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.3.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

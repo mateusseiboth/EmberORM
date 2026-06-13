@@ -1,0 +1,49 @@
+datasource db {
+  provider = "firebird"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "ember-client-js"
+  output   = "../generated"
+}
+
+/// Application user.
+enum Role {
+  USER
+  ADMIN
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique @db.VarChar(255)
+  name      String?  @db.VarChar(120)
+  role      Role     @default(USER)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("CREATED_AT")
+  posts     Post[]
+  profile   Profile?
+
+  @@index([email])
+  @@map("USERS")
+}
+
+model Profile {
+  id     Int     @id @default(autoincrement())
+  bio    String? @db.VarChar(500)
+  userId Int     @unique @map("USER_ID")
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Post {
+  id        Int      @id @default(autoincrement())
+  title     String   @db.VarChar(200)
+  content   String?  @db.Text
+  published Boolean  @default(false)
+  views     Int      @default(0)
+  authorId  Int      @map("AUTHOR_ID")
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([authorId])
+}
