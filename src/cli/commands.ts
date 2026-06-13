@@ -8,9 +8,10 @@ import {
   resolveDatasourceUrl,
   validateSchema,
 } from "@ember/schema";
-import { createDriver } from "@ember/driver";
+import { createDriver, type SqlDriver } from "@ember/driver";
 import { Introspector } from "@ember/introspect";
 import { writeClient } from "@ember/generator";
+import { Migrator } from "@ember/migrate";
 import { readFileSync } from "node:fs";
 
 export interface CliContext {
@@ -131,13 +132,102 @@ export async function dbPull(
   }
 }
 
-/** `ember db push` is not yet implemented (no migration engine). */
-export function notImplemented(ctx: CliContext, name: string): number {
-  ctx.error(`Command '${name}' is not implemented yet.`);
-  return 1;
+/** `ember migrate dev [--name x]` — diff, write a migration file, apply it. */
+export async function migrateDev(
+  ctx: CliContext,
+  options: { schemaPath?: string; url?: string; name?: string },
+): Promise<number> {
+  return withMigrator(ctx, options, async (migrator) => {
+    const result = await migrator.dev(options.name ?? "migration");
+    if (result.empty) {
+      ctx.log("No schema changes — database already in sync.");
+      return 0;
+    }
+    ctx.log(`Created and applied migration ${result.id} (${result.statements.length} step(s)).`);
+    return 0;
+  });
+}
+
+/** `ember migrate deploy` — apply all pending migration files. */
+export async function migrateDeploy(
+  ctx: CliContext,
+  options: { schemaPath?: string; url?: string },
+): Promise<number> {
+  return withMigrator(ctx, options, async (migrator) => {
+    const { applied } = await migrator.deploy();
+    if (applied.length === 0) {
+      ctx.log("No pending migrations.");
+      return 0;
+    }
+    for (const m of applied) ctx.log(`Applied ${m.id} (${m.steps} step(s)).`);
+    return 0;
+  });
+}
+
+/** `ember migrate status` — show applied vs pending migrations. */
+export async function migrateStatus(
+  ctx: CliContext,
+  options: { schemaPath?: string; url?: string },
+): Promise<number> {
+  return withMigrator(ctx, options, async (migrator) => {
+    const { applied, pending } = await migrator.status();
+    ctx.log(`Applied (${applied.length}):`);
+    for (const id of applied) ctx.log(`  ✓ ${id}`);
+    ctx.log(`Pending (${pending.length}):`);
+    for (const id of pending) ctx.log(`  • ${id}`);
+    return 0;
+  });
+}
+
+/** `ember db push` — apply the diff directly without creating a migration. */
+export async function dbPush(
+  ctx: CliContext,
+  options: { schemaPath?: string; url?: string },
+): Promise<number> {
+  return withMigrator(ctx, options, async (migrator) => {
+    const { statements } = await migrator.push();
+    if (statements.length === 0) {
+      ctx.log("No schema changes — database already in sync.");
+      return 0;
+    }
+    ctx.log(`Applied ${statements.length} statement(s) to the database.`);
+    return 0;
+  });
 }
 
 // ---- helpers --------------------------------------------------------------
+
+/** Resolve schema + URL, open a driver, build a Migrator, and run `fn`. */
+async function withMigrator(
+  ctx: CliContext,
+  options: { schemaPath?: string; url?: string },
+  fn: (migrator: Migrator) => Promise<number>,
+): Promise<number> {
+  const path = requireSchema(ctx, options.schemaPath);
+  if (!path) return 1;
+  const { document } = loadSchema(path);
+
+  const url =
+    options.url ??
+    resolveDatasourceUrl(document, dirname(path)) ??
+    process.env.DATABASE_URL;
+  if (!url) {
+    ctx.error(
+      "No database URL. Set DATABASE_URL, pass --url, or add a datasource block.",
+    );
+    return 1;
+  }
+
+  const migrationsDir = resolve(dirname(path), "migrations");
+  const driver: SqlDriver = createDriver(url);
+  try {
+    await driver.connect();
+    const migrator = new Migrator(driver, document, migrationsDir);
+    return await fn(migrator);
+  } finally {
+    await driver.disconnect();
+  }
+}
 
 function requireSchema(ctx: CliContext, schemaPath?: string): string | null {
   const path = findSchemaPath(ctx.cwd, schemaPath);

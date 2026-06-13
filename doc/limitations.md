@@ -15,9 +15,6 @@ Current, honest status of the implementation.
   `include` adds the relation types; `select` maps to the selected keys' full
   types. The full Prisma conditional `GetPayload` (deep nested narrowing) is not
   reproduced.
-- **Composite-key relations** are resolved for writes, but `include` of a
-  relation joined on more than one column throws (single-column keys only). The
-  batched-IN path needs a composite `(a,b) IN (...)` strategy.
 - **`updateMany` with nested writes**: only scalar fields are applied to the
   matched set; nested relation writes in `updateMany` are not processed.
 - **Scalar update operators**: `{ set }` and direct assignment are supported;
@@ -32,9 +29,17 @@ Current, honest status of the implementation.
 
 ## Roadmap
 
-1. Composite-key `include` and `(a,b) IN (...)` batching.
-2. Full `GetPayload` select narrowing in the generator.
-3. Numeric atomic update operators and JSON path filters.
-4. `cursor`/`distinct` pushdown.
-5. A migration engine (`ember migrate`) diffing schema ↔ database.
-6. Optional native (Go/Rust) introspection/codegen behind the same interfaces.
+1. Full `GetPayload` select narrowing in the generator.
+2. Numeric atomic update operators and JSON path filters.
+3. `cursor`/`distinct` pushdown.
+4. Optional native (Go/Rust) introspection/codegen behind the same interfaces.
+
+## Recently completed
+
+- **Composite-key relations** in `include`/`select`: parent key tuples are
+  matched with `IN (...)` for single-column keys and an `OR` of AND-ed equality
+  groups for composite keys (Firebird lacks a portable row-value `IN`). Nested
+  writes already carried composite foreign keys. See `engine.loadRelation`.
+- **Migration engine** (`ember migrate dev/deploy/status`, `ember db push`):
+  diffs the schema against the live database and emits Firebird DDL. See
+  [migrations.md](./migrations.md).

@@ -71,3 +71,13 @@ export {
   generateClientSource,
   writeClient,
 } from "@ember/generator";
+
+// Migrations
+export {
+  Migrator,
+  diffSchemas,
+  planMigration,
+  renderMigrationSql,
+  splitStatements,
+  FirebirdDdl,
+} from "@ember/migrate";

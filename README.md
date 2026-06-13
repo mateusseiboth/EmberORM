@@ -89,6 +89,7 @@ model Post {
 | Pagination        | `take` / `skip` (`FIRST` / `SKIP`)                                         |
 | Transactions      | interactive `$transaction(fn)` and sequential `$transaction([...])`       |
 | Raw               | `$queryRaw`, `$executeRaw`, `*Unsafe` variants                            |
+| Migrations        | `ember migrate dev / deploy / status`, `ember db push` (schema↔DB diff)   |
 | Tooling           | `ember init / db pull / generate / format / validate`                     |
 
 ## Documentation

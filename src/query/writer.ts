@@ -4,6 +4,7 @@ import {
   type SchemaDocument,
   fieldColumn,
   idFields,
+  modelTable,
 } from "@ember/ast";
 import { QueryValidationError, RecordNotFoundError } from "@ember/errors";
 import { Sql, type SqlDialect } from "@ember/sql";
@@ -264,7 +265,7 @@ export class WriteProcessor {
         .map((f) => `${d.quoteRef(alias, fieldColumn(f))} AS ${d.quoteId(f.name)}`)
         .join(", "),
     );
-    sql.push(` FROM ${d.quoteId(model.dbName ?? model.name)} ${d.quoteId(alias)}`);
+    sql.push(` FROM ${d.quoteId(modelTable(model))} ${d.quoteId(alias)}`);
     const cond = compileWhere(model, alias, where, this.ctx());
     if (!cond.isEmpty()) sql.push(" WHERE ").append(cond);
     return sql;

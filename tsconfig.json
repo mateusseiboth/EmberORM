@@ -33,6 +33,8 @@
       "@ember/client/*": ["src/client/*"],
       "@ember/introspect": ["src/introspect/index.ts"],
       "@ember/introspect/*": ["src/introspect/*"],
+      "@ember/migrate": ["src/migrate/index.ts"],
+      "@ember/migrate/*": ["src/migrate/*"],
       "@ember/generator": ["src/generator/index.ts"],
       "@ember/generator/*": ["src/generator/*"],
       "@ember/errors": ["src/errors/index.ts"],

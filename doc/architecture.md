@@ -11,6 +11,7 @@ SchemaDocument (AST / DMMF-like)            src/ast
    │
    ├── generator  → typed TS client         src/generator
    ├── introspect ← RDB$ system tables      src/introspect
+   ├── migrate    → diff + DDL + history     src/migrate
    │
    ▼
 QueryEngine                                 src/query
@@ -52,7 +53,11 @@ node-firebird (pool + transactions)
   `EmberClient` extends it and adds strict per-model types.
 - **`src/generator`** — emits the typed client (`ember generate`).
 - **`src/introspect`** — reverse-engineers a `SchemaDocument` from a live DB.
-- **`src/cli`** — `ember` command (`init/db pull/generate/format/validate`).
+- **`src/migrate`** — `diffSchemas` (desired vs introspected current) →
+  `planMigration` (ordered Firebird DDL) → `Migrator` (apply + history table).
+  See [migrations.md](./migrations.md).
+- **`src/cli`** — `ember` command (`init/db pull/db push/generate/migrate/
+  format/validate`).
 
 ## Design decisions
 

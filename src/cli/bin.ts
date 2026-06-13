@@ -5,10 +5,13 @@ import { EmberError } from "@ember/errors";
 import {
   type CliContext,
   dbPull,
+  dbPush,
   format,
   generate,
   init,
-  notImplemented,
+  migrateDeploy,
+  migrateDev,
+  migrateStatus,
   validate,
 } from "./commands";
 
@@ -19,13 +22,18 @@ Usage: ember <command> [options]
 Commands:
   init                 Scaffold ember/schema.ember
   db pull              Introspect the database into your schema
+  db push              Apply schema changes directly (no migration file)
   generate             Generate the typed client from the schema
+  migrate dev          Diff, create a migration file, and apply it
+  migrate deploy       Apply all pending migration files
+  migrate status       Show applied vs pending migrations
   format               Re-print the schema with canonical formatting
   validate             Parse and validate the schema
 
 Options:
   --schema <path>      Path to the schema file
   --url <url>          Firebird connection URL (overrides datasource/env)
+  --name <name>        Migration name (migrate dev)
   -h, --help           Show this help
   -v, --version        Show version
 `;
@@ -79,6 +87,7 @@ async function main(): Promise<number> {
 
   const schemaPath = typeof flags.schema === "string" ? flags.schema : undefined;
   const url = typeof flags.url === "string" ? flags.url : undefined;
+  const name = typeof flags.name === "string" ? flags.name : undefined;
   const [first, second] = command;
 
   switch (first) {
@@ -92,8 +101,14 @@ async function main(): Promise<number> {
       return generate(ctx, schemaPath);
     case "db":
       if (second === "pull") return dbPull(ctx, { schemaPath, url });
-      if (second === "push") return notImplemented(ctx, "db push");
+      if (second === "push") return dbPush(ctx, { schemaPath, url });
       ctx.error(`Unknown db subcommand '${second ?? ""}'.`);
+      return 1;
+    case "migrate":
+      if (second === "dev") return migrateDev(ctx, { schemaPath, url, name });
+      if (second === "deploy") return migrateDeploy(ctx, { schemaPath, url });
+      if (second === "status") return migrateStatus(ctx, { schemaPath, url });
+      ctx.error(`Unknown migrate subcommand '${second ?? ""}'.`);
       return 1;
     default:
       ctx.error(`Unknown command '${first}'. Run 'ember --help'.`);

@@ -299,27 +299,18 @@ export class QueryEngine {
     if (parentRows.length === 0) return;
     const rel = resolveRelation(this.schema, parentModel, relation.field);
     const fieldName = relation.field.name;
+    const { fromFields, toFields } = rel;
 
-    // Single-column key fast path (the common case).
-    if (rel.fromFields.length !== 1) {
-      throw new QueryValidationError(
-        `Composite-key relations are not yet supported for include ('${fieldName}').`,
-      );
-    }
-    const fromField = rel.fromFields[0]!;
-    const toField = rel.toFields[0]!;
-    const keyValues = uniq(
-      parentRows
-        .map((r) => r[fromField])
-        .filter((v) => v !== null && v !== undefined),
-    );
+    // Distinct parent key tuples (rows with a null key part can't match).
+    const parentTuples = uniqueTuples(parentRows, fromFields);
 
     const grouped = new Map<string, Record<string, unknown>[]>();
-    if (keyValues.length > 0) {
-      const childWhere: WhereInput = {
-        ...(relation.args.where ?? {}),
-        [toField]: { in: keyValues },
-      };
+    if (parentTuples.length > 0) {
+      const childWhere = relationKeyWhere(
+        toFields,
+        parentTuples,
+        relation.args.where,
+      );
       const childRows = await this.readMany(
         rel.relatedModel,
         {
@@ -331,29 +322,30 @@ export class QueryEngine {
           ...(rel.isList ? {} : { take: relation.args.take, skip: relation.args.skip }),
         },
         exec,
-        [toField],
+        toFields,
       );
       for (const child of childRows) {
-        const k = keyOf(child[toField]);
+        const k = tupleKey(child, toFields);
         const list = grouped.get(k) ?? [];
         list.push(child);
         grouped.set(k, list);
       }
     }
 
-    const stripToField = (() => {
-      const visible = selectedScalarNames(rel.relatedModel, relation.args.select);
-      return visible ? !visible.has(toField) : false;
-    })();
+    // Strip the join key columns added only for stitching when not selected.
+    const visible = selectedScalarNames(rel.relatedModel, relation.args.select);
+    const stripFields = visible
+      ? toFields.filter((f) => !visible.has(f))
+      : [];
 
     for (const parent of parentRows) {
-      const k = keyOf(parent[fromField]);
+      const k = tupleKey(parent, fromFields);
       let matches = grouped.get(k) ?? [];
       if (rel.isList && (relation.args.take != null || relation.args.skip != null)) {
         matches = applyPagination(matches, relation.args.take, relation.args.skip);
       }
-      const attached = stripToField
-        ? matches.map((m) => omit(m, toField))
+      const attached = stripFields.length
+        ? matches.map((m) => omitAll(m, stripFields))
         : matches;
       parent[fieldName] = rel.isList ? attached : (attached[0] ?? null);
     }
@@ -489,12 +481,63 @@ function keyOf(value: unknown): string {
   return value instanceof Date ? value.toISOString() : String(value);
 }
 
-function omit(
+/** Stable string key for a tuple of field values (composite-key grouping). */
+function tupleKey(row: Record<string, unknown>, fields: string[]): string {
+  return fields.map((f) => keyOf(row[f])).join(" ");
+}
+
+/** Distinct non-null parent key tuples, preserving field order. */
+function uniqueTuples(
+  rows: Record<string, unknown>[],
+  fields: string[],
+): unknown[][] {
+  const seen = new Set<string>();
+  const out: unknown[][] = [];
+  for (const row of rows) {
+    const tuple = fields.map((f) => row[f]);
+    if (tuple.some((v) => v === null || v === undefined)) continue;
+    const key = tuple.map(keyOf).join(" ");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(tuple);
+  }
+  return out;
+}
+
+/**
+ * Build the child filter that matches any parent key tuple. Single-column keys
+ * use an efficient `IN (...)`; composite keys expand to an `OR` of equality
+ * groups, since Firebird has no portable row-value `IN`.
+ */
+function relationKeyWhere(
+  toFields: string[],
+  parentTuples: unknown[][],
+  baseWhere: WhereInput | undefined,
+): WhereInput {
+  const base = baseWhere ?? {};
+  if (toFields.length === 1) {
+    const field = toFields[0]!;
+    return { ...base, [field]: { in: parentTuples.map((t) => t[0]) } };
+  }
+  const or: WhereInput[] = parentTuples.map((tuple) => {
+    const cond: WhereInput = {};
+    toFields.forEach((f, i) => {
+      cond[f] = tuple[i] as never;
+    });
+    return cond;
+  });
+  // Combine with any user-provided where via AND so both constraints hold.
+  if (Object.keys(base).length === 0) return { OR: or };
+  return { AND: [base, { OR: or }] };
+}
+
+function omitAll(
   obj: Record<string, unknown>,
-  key: string,
+  keys: string[],
 ): Record<string, unknown> {
-  const { [key]: _drop, ...rest } = obj;
-  return rest;
+  const out: Record<string, unknown> = { ...obj };
+  for (const k of keys) delete out[k];
+  return out;
 }
 
 function applyPagination(
