@@ -30,6 +30,9 @@ Current, honest status of the implementation.
 
 ## Recently completed
 
+- **Relation `_count`**: `select`/`include` `_count` (boolean or
+  `{ select: { rel } }`) attaches per-relation child counts via a batched
+  `GROUP BY`; typed in the generated client against to-many relations.
 - **`cursor` & `distinct`**: cursor adds a `>=`/`<=` filter + ordering on a
   single unique field; distinct de-duplicates (and paginates) in memory.
 - **Recursive `GetPayload`**: the generated client narrows `select`/`include`

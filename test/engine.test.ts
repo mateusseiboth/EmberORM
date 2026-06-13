@@ -92,6 +92,35 @@ describe("query engine reads", () => {
     expect(childCall.params).toEqual([1, 2]);
   });
 
+  it("attaches relation _count via a grouped child query", async () => {
+    const driver = new MockDriver([
+      [
+        /FROM "USERS"/,
+        () => [
+          { id: 1, email: "a", name: "A" },
+          { id: 2, email: "b", name: "B" },
+        ],
+      ],
+      [
+        /GROUP BY/,
+        () => [
+          { authorId: 1, _count_all: 3 },
+          // user 2 has no posts -> absent -> defaults to 0
+        ],
+      ],
+    ]);
+    const engine = new QueryEngine(doc, dialect, driver);
+    const users = await engine.findMany("User", {
+      include: { _count: { select: { posts: true } } },
+    });
+    expect((users[0]!._count as any).posts).toBe(3);
+    expect((users[1]!._count as any).posts).toBe(0);
+
+    const countCall = driver.calls.find((c) => /GROUP BY/.test(c.sql))!;
+    expect(countCall.sql).toContain("COUNT(*)");
+    expect(countCall.sql).toContain('"AUTHOR_ID" IN (?, ?)');
+  });
+
   it("findUnique returns null when no rows", async () => {
     const driver = new MockDriver([[/FROM "USERS"/, () => []]]);
     const engine = new QueryEngine(doc, dialect, driver);

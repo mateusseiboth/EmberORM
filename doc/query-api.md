@@ -92,6 +92,24 @@ db.post.update({
 });
 ```
 
+## Relation counts (`_count`)
+
+Count related rows alongside a query via `select`/`include`:
+
+```ts
+const users = await db.user.findMany({
+  include: { _count: { select: { posts: true } } },
+});
+users[0]._count.posts; // number
+
+// _count: true counts every to-many relation
+await db.user.findMany({ include: { _count: true } });
+```
+
+Counts are loaded with one batched `GROUP BY` query per relation and default to
+`0` for parents with no children. The generated client types `_count` to the
+requested to-many relations.
+
 ## Aggregation
 
 ```ts

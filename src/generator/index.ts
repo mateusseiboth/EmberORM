@@ -204,12 +204,20 @@ export type ${model.name}WhereUniqueInput = ${this.whereUnique(model)};`;
     const include = relationFields(model)
       .map((f) => `  ${f.name}?: boolean | ${f.type}FindManyArgs;`)
       .join("\n");
+
+    const listRelations = relationFields(model).filter((f) => f.isList);
+    const countLine = listRelations.length
+      ? `\n  _count?: boolean | { select?: { ${listRelations
+          .map((f) => `${f.name}?: boolean`)
+          .join("; ")} } };`
+      : "";
+
     return `export type ${model.name}Select = {
-${scalarSel}${relSel ? "\n" + relSel : ""}
+${scalarSel}${relSel ? "\n" + relSel : ""}${countLine}
 };
 
 export type ${model.name}Include = {
-${include || "  [k: string]: never;"}
+${include || "  [k: string]: never;"}${countLine}
 };`;
   }
 
@@ -432,15 +440,30 @@ type $RelationResult<Info, Sub> = Info extends {
       : $Payload<RM, $NormalizeArgs<Sub>>
   : never;
 
+// To-many relation keys of a model (eligible for _count).
+type $ListRelations<M extends $ModelName> = {
+  [K in keyof $Relations<M>]: $Relations<M>[K] extends { isList: true }
+    ? K
+    : never;
+}[keyof $Relations<M>];
+
+type $CountResult<M extends $ModelName, C> = C extends { select: infer SC }
+  ? { [K in keyof SC & $ListRelations<M>]: number }
+  : { [K in $ListRelations<M> & string]: number };
+
+type $CountPart<M extends $ModelName, A> = A extends { _count: infer C }
+  ? { _count: $CountResult<M, C> }
+  : {};
+
 type $SelectResult<M extends $ModelName, S> = {
   [K in keyof S & keyof $Scalar<M>]: $Scalar<M>[K];
 } & {
   [K in keyof S & keyof $Relations<M>]: $RelationResult<$Relations<M>[K], S[K]>;
-};
+} & $CountPart<M, S>;
 
 type $IncludeResult<M extends $ModelName, I> = {
   [K in keyof I & keyof $Relations<M>]: $RelationResult<$Relations<M>[K], I[K]>;
-};
+} & $CountPart<M, I>;
 
 export type $Payload<M extends $ModelName, A> = A extends { select: infer S }
   ? $SelectResult<M, S>

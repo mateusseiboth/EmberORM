@@ -49,6 +49,18 @@ async function defaultPayload() {
   void email;
 }
 
+async function countNarrowing() {
+  const rows = await db.user.findMany({
+    include: { _count: { select: { posts: true } } },
+  });
+  // _count exposes the requested to-many relation as a number:
+  const posts: number = rows[0]!._count.posts;
+  void posts;
+  // @ts-expect-error - 'profile' is a to-one relation, not countable
+  rows[0]!._count.profile;
+}
+
 void selectNarrowing;
 void includeNarrowing;
 void defaultPayload;
+void countNarrowing;

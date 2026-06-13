@@ -255,6 +255,7 @@ export class QueryEngine {
     forceKeep: string[] = [],
   ): Promise<Record<string, unknown>[]> {
     const relations = this.readRelations(model, args.select, args.include);
+    const countFields = this.readCountRelations(model, args.select, args.include);
     const selectedScalars = selectedScalarNames(model, args.select);
     const distinctFields = normalizeDistinct(model, args.distinct);
     // `distinct` is de-duplicated in memory, so pagination cannot be pushed to
@@ -265,7 +266,9 @@ export class QueryEngine {
     const { where, orderBy } = applyCursor(model, args, distinctFields);
 
     const relationKeyFields = uniq(
-      relations.flatMap((r) => resolveRelation(this.schema, model, r.field).fromFields),
+      [...relations.map((r) => r.field), ...countFields].flatMap(
+        (field) => resolveRelation(this.schema, model, field).fromFields,
+      ),
     );
     const internalKeys = uniq([
       ...relationKeyFields,
@@ -299,6 +302,9 @@ export class QueryEngine {
 
     for (const relation of relations) {
       await this.loadRelation(model, rows, relation, exec);
+    }
+    if (countFields.length > 0) {
+      await this.loadCounts(model, rows, countFields, exec);
     }
 
     // Strip internal scalar keys added only for stitching/de-dup.
@@ -394,6 +400,63 @@ export class QueryEngine {
       }
     }
     return out;
+  }
+
+  /**
+   * Resolve which to-many relations to count for `_count` in select/include.
+   * `_count: true` counts every list relation; `_count: { select: { rel } }`
+   * counts the named ones.
+   */
+  private readCountRelations(
+    model: ModelNode,
+    select?: SelectInput,
+    include?: IncludeInput,
+  ): FieldNode[] {
+    const spec =
+      (include?._count as boolean | NestedReadArgs | undefined) ??
+      (select?._count as boolean | NestedReadArgs | undefined);
+    if (!spec) return [];
+    const listRelations = model.fields.filter(
+      (f) => f.kind === "object" && f.isList,
+    );
+    if (spec === true) return listRelations;
+    const selected = (spec as { select?: Record<string, unknown> }).select;
+    if (!selected) return listRelations;
+    return listRelations.filter((f) => selected[f.name]);
+  }
+
+  /** Attach a `_count` object to each row with per-relation child counts. */
+  private async loadCounts(
+    model: ModelNode,
+    rows: Record<string, unknown>[],
+    countFields: FieldNode[],
+    exec: Executor,
+  ): Promise<void> {
+    for (const row of rows) row._count = {};
+
+    for (const field of countFields) {
+      const rel = resolveRelation(this.schema, model, field);
+      const tuples = uniqueTuples(rows, rel.fromFields);
+      const grouped = new Map<string, number>();
+
+      if (tuples.length > 0) {
+        const where = relationKeyWhere(rel.toFields, tuples, undefined);
+        const { sql } = compileGroupBy(
+          rel.relatedModel,
+          { by: rel.toFields, _count: true, where },
+          newContext(this.schema, this.dialect),
+        );
+        const countRows = await exec(sql);
+        for (const cr of countRows) {
+          grouped.set(tupleKey(cr, rel.toFields), Number(cr._count_all ?? 0));
+        }
+      }
+
+      for (const row of rows) {
+        const count = grouped.get(tupleKey(row, rel.fromFields)) ?? 0;
+        (row._count as Record<string, number>)[field.name] = count;
+      }
+    }
   }
 
   // ---- read-back & helpers ------------------------------------------------
