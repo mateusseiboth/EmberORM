@@ -292,6 +292,7 @@ ${[...updateScalars, ...updateRelations].join("\n")}
   include?: ${n}Include;
   take?: number;
   skip?: number;
+  cursor?: ${n}WhereUniqueInput;
   distinct?: (keyof ${n})[];
 };
 

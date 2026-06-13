@@ -13,9 +13,9 @@ Current, honest status of the implementation.
 
 - **`updateMany` with nested writes**: only scalar fields are applied to the
   matched set; nested relation writes in `updateMany` are not processed.
-- **`cursor`/`distinct`** are accepted in args but not yet pushed into SQL.
-- **Migrations** (`ember db push`/`migrate`) are not implemented — there is no
-  migration engine. Use `db pull` against an externally-managed schema.
+- **`cursor`** supports a single unique field; multi-field cursors throw.
+- **`distinct`** de-duplicates in memory (and therefore paginates in memory),
+  rather than via a SQL window function.
 - **`createMany`** inserts row-by-row (one statement each) inside the
   transaction; it does not batch into a single multi-row INSERT.
 - Affected-row counts for `updateMany`/`deleteMany` come from a preceding
@@ -23,12 +23,15 @@ Current, honest status of the implementation.
 
 ## Roadmap
 
-1. JSON path filters.
-2. `cursor`/`distinct` pushdown.
-3. Optional native (Go/Rust) introspection/codegen behind the same interfaces.
+1. Nested writes in `updateMany`.
+2. JSON path filters.
+3. SQL-window-function `distinct` and multi-field cursors.
+4. Optional native (Go/Rust) introspection/codegen behind the same interfaces.
 
 ## Recently completed
 
+- **`cursor` & `distinct`**: cursor adds a `>=`/`<=` filter + ordering on a
+  single unique field; distinct de-duplicates (and paginates) in memory.
 - **Recursive `GetPayload`**: the generated client narrows `select`/`include`
   to arbitrary depth via a type-level registry (`$ScalarPayload`/`$RelationMap`)
   and a generic `$Payload<Model, Args>` resolver — nested relation selects,

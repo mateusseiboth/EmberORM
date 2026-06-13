@@ -28,6 +28,7 @@ import type {
   IncludeInput,
   NestedReadArgs,
   SelectInput,
+  SortOrder,
   UpdateArgs,
   UpdateManyArgs,
   UpsertArgs,
@@ -255,34 +256,56 @@ export class QueryEngine {
   ): Promise<Record<string, unknown>[]> {
     const relations = this.readRelations(model, args.select, args.include);
     const selectedScalars = selectedScalarNames(model, args.select);
+    const distinctFields = normalizeDistinct(model, args.distinct);
+    // `distinct` is de-duplicated in memory, so pagination cannot be pushed to
+    // SQL in that case (it would slice before de-duplication).
+    const memoryPaginate = distinctFields.length > 0;
+
+    // `cursor` augments the filter/order so SQL can start at the cursor row.
+    const { where, orderBy } = applyCursor(model, args, distinctFields);
+
     const relationKeyFields = uniq(
       relations.flatMap((r) => resolveRelation(this.schema, model, r.field).fromFields),
     );
+    const internalKeys = uniq([
+      ...relationKeyFields,
+      ...distinctFields, // fetched for de-dup; stripped below if not selected
+    ]);
     const projectionNames = uniq([
       ...(selectedScalars ?? scalarFields(model).map((f) => f.name)),
-      ...relationKeyFields,
+      ...internalKeys,
       ...forceKeep,
     ]);
     const projection = projectionNames.map((n) => fieldByName(model, n));
 
     const stmt = compileFindMany(
       model,
-      { where: args.where, orderBy: args.orderBy, take: args.take, skip: args.skip },
+      {
+        where,
+        orderBy,
+        take: memoryPaginate ? undefined : args.take,
+        skip: memoryPaginate ? undefined : args.skip,
+      },
       projection,
       newContext(this.schema, this.dialect),
     );
     const rawRows = await exec(stmt.sql);
-    const rows = rawRows.map((r) => coerceRow(r, projection));
+    let rows = rawRows.map((r) => coerceRow(r, projection));
+
+    if (memoryPaginate) {
+      rows = dedupeBy(rows, distinctFields);
+      rows = applyPagination(rows, args.take, args.skip);
+    }
 
     for (const relation of relations) {
       await this.loadRelation(model, rows, relation, exec);
     }
 
-    // Strip internal scalar keys added only for stitching.
+    // Strip internal scalar keys added only for stitching/de-dup.
     if (selectedScalars) {
       const visible = new Set([...selectedScalars, ...forceKeep]);
       for (const row of rows) {
-        for (const name of relationKeyFields) {
+        for (const name of internalKeys) {
           if (!visible.has(name)) delete row[name];
         }
       }
@@ -548,6 +571,89 @@ function applyPagination(
   const start = skip ?? 0;
   const end = take != null ? start + take : undefined;
   return rows.slice(start, end);
+}
+
+/** Validate and return the scalar field names for a `distinct` argument. */
+function normalizeDistinct(
+  model: ModelNode,
+  distinct: string[] | undefined,
+): string[] {
+  if (!distinct || distinct.length === 0) return [];
+  for (const name of distinct) {
+    const field = model.fields.find((f) => f.name === name);
+    if (!field || field.kind === "object") {
+      throw new QueryValidationError(
+        `Cannot apply distinct on '${model.name}.${name}' (not a scalar field).`,
+      );
+    }
+  }
+  return uniq(distinct);
+}
+
+/** Keep the first row for each distinct tuple, preserving order. */
+function dedupeBy(
+  rows: Record<string, unknown>[],
+  fields: string[],
+): Record<string, unknown>[] {
+  const seen = new Set<string>();
+  const out: Record<string, unknown>[] = [];
+  for (const row of rows) {
+    const key = tupleKey(row, fields);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(row);
+  }
+  return out;
+}
+
+/**
+ * Translate a `cursor` into an extra filter + ordering so SQL starts at the
+ * cursor row. Supports a single cursor field (the common case); the ordering
+ * direction is taken from `orderBy` on that field, defaulting to ascending.
+ */
+function applyCursor(
+  model: ModelNode,
+  args: FindManyArgs,
+  _distinctFields: string[],
+): { where: WhereInput | undefined; orderBy: FindManyArgs["orderBy"] } {
+  if (!args.cursor || Object.keys(args.cursor).length === 0) {
+    return { where: args.where, orderBy: args.orderBy };
+  }
+  const entries = Object.entries(args.cursor).filter(([, v]) => v !== undefined);
+  if (entries.length === 0) return { where: args.where, orderBy: args.orderBy };
+  if (entries.length > 1) {
+    throw new QueryValidationError(
+      `Multi-field cursors are not supported (got ${entries.map(([k]) => k).join(", ")}).`,
+    );
+  }
+  const [field, value] = entries[0]!;
+  if (!model.fields.some((f) => f.name === field && f.kind !== "object")) {
+    throw new QueryValidationError(
+      `Cursor field '${model.name}.${field}' must be a scalar field.`,
+    );
+  }
+  const direction = directionForField(args.orderBy, field) ?? "asc";
+  const cursorCond: WhereInput = {
+    [field]: direction === "desc" ? { lte: value } : { gte: value },
+  };
+  const where: WhereInput = args.where
+    ? { AND: [args.where, cursorCond] }
+    : cursorCond;
+  const orderBy = args.orderBy ?? { [field]: direction };
+  return { where, orderBy };
+}
+
+function directionForField(
+  orderBy: FindManyArgs["orderBy"],
+  field: string,
+): SortOrder | undefined {
+  if (!orderBy) return undefined;
+  const list = Array.isArray(orderBy) ? orderBy : [orderBy];
+  for (const obj of list) {
+    const dir = obj[field];
+    if (dir === "asc" || dir === "desc") return dir;
+  }
+  return undefined;
 }
 
 function reshapeAggregate(row: Record<string, unknown>): Record<string, unknown> {

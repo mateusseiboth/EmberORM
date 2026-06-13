@@ -42,6 +42,15 @@ async function main() {
   const emails = await db.user.findMany({ select: { id: true, email: true } });
   emails.forEach((e) => e.email.length);
 
+  // cursor-based pagination + distinct
+  const page = await db.user.findMany({
+    cursor: { id: 100 },
+    orderBy: { id: "asc" },
+    take: 25,
+    distinct: ["email"],
+  });
+  void page;
+
   // aggregation
   const stats = await db.post.aggregate({
     where: { published: true },

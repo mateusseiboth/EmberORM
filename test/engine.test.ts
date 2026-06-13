@@ -104,6 +104,38 @@ describe("query engine reads", () => {
     const engine = new QueryEngine(doc, dialect, driver);
     expect(await engine.count("User", {})).toBe(7);
   });
+
+  it("cursor adds a >= filter and orders by the cursor field", async () => {
+    const driver = new MockDriver([
+      [/FROM "USERS"/, () => [{ id: 5, email: "e", name: "n" }]],
+    ]);
+    const engine = new QueryEngine(doc, dialect, driver);
+    await engine.findMany("User", { cursor: { id: 5 }, take: 10 });
+    const call = driver.calls.find((c) => /FROM "USERS"/.test(c.sql))!;
+    expect(call.sql).toContain('"t0"."ID" >= ?');
+    expect(call.sql).toContain('ORDER BY "t0"."ID" ASC');
+    expect(call.sql).toContain("FIRST 10");
+    expect(call.params).toContain(5);
+  });
+
+  it("distinct de-duplicates in memory and paginates after", async () => {
+    const driver = new MockDriver([
+      [
+        /FROM "USERS"/,
+        () => [
+          { id: 1, email: "a@x.com", name: "Dup" },
+          { id: 2, email: "a@x.com", name: "Dup" },
+          { id: 3, email: "b@x.com", name: "Other" },
+        ],
+      ],
+    ]);
+    const engine = new QueryEngine(doc, dialect, driver);
+    const rows = await engine.findMany("User", { distinct: ["name"], take: 5 });
+    expect(rows.map((r) => r.name)).toEqual(["Dup", "Other"]);
+    // distinct disables SQL pagination (done in memory instead)
+    const call = driver.calls.find((c) => /FROM "USERS"/.test(c.sql))!;
+    expect(call.sql).not.toContain("FIRST");
+  });
 });
 
 describe("query engine writes", () => {

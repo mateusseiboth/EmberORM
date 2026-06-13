@@ -12,7 +12,8 @@ db.user.findMany({
   include,          // load relations (typed in the result)
   orderBy,          // { field: "asc" | "desc" } or an array for tie-breakers
   take, skip,       // pagination (FIRST / SKIP)
-  distinct,         // (parsed; applied where supported)
+  cursor,           // cursor-based pagination (single unique field)
+  distinct,         // de-duplicate on the given scalar fields
 });
 
 db.user.findFirst(args);          // first match or null
@@ -24,6 +25,14 @@ db.user.findUniqueOrThrow({ where });
 `select` narrows the returned scalar fields (and may also pull relations);
 `include` keeps all scalars and adds relations. Both narrow the **static type**
 of the result in the generated client.
+
+**`cursor`** takes a single unique scalar field (`{ id: 100 }`). It adds a
+`>=`/`<=` filter relative to the ordering on that field (ascending by default,
+or the direction from `orderBy`) and orders by it, so SQL starts at the cursor
+row; combine with `skip`/`take`. **`distinct`** de-duplicates on the listed
+scalar fields, keeping the first row per combination in the current order;
+because de-duplication happens in memory, `take`/`skip` are also applied in
+memory when `distinct` is used.
 
 ## Filtering (`where`)
 
