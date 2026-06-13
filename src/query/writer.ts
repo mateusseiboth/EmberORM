@@ -108,6 +108,31 @@ export class WriteProcessor {
     }
   }
 
+  /**
+   * Scalar-only bulk update (for `updateMany`). Atomic operators are supported;
+   * nested relation writes are rejected, matching Prisma's `updateMany`.
+   */
+  async updateManyRows(
+    model: ModelNode,
+    where: WhereInput | undefined,
+    data: Record<string, unknown>,
+  ): Promise<void> {
+    for (const key of Object.keys(data)) {
+      const field = model.fields.find((f) => f.name === key);
+      if (field?.kind === "object") {
+        throw new QueryValidationError(
+          `updateMany does not support nested relation writes ('${model.name}.${key}'). Use update() per record.`,
+        );
+      }
+    }
+    const withDefaults = applyUpdateDefaults(model, data);
+    const assignments = this.toUpdateColumnMap(model, withDefaults);
+    if (assignments.size > 0) {
+      const stmt = compileUpdate(model, where, assignments, this.ctx());
+      await this.exec(stmt.sql);
+    }
+  }
+
   // ---- partition & mapping ------------------------------------------------
 
   private partition(

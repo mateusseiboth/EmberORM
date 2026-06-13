@@ -388,7 +388,7 @@ export type ${n}GroupByArgs = ${n}AggregateArgs & {
     return `export type EmberClientOptions = {
   datasourceUrl?: string;
   datasource?: ClientOptions["datasource"];
-  log?: boolean;
+  log?: ClientOptions["log"];
 };
 
 export class EmberClient extends EmberClientBase {

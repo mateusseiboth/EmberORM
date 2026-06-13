@@ -17,6 +17,16 @@ import {
 
 const dialect = new FirebirdDialect();
 
+function parseScema21() {
+  return findModel(
+    parseSchema(`model Account {
+      id      Int     @id @default(autoincrement())
+      enabled Boolean @default(true)
+    }`),
+    "Account",
+  )!;
+}
+
 const DESIRED = parseSchema(`model User {
   id    Int    @id @default(autoincrement())
   email String @unique @db.VarChar(255)
@@ -40,6 +50,23 @@ describe("DDL generator", () => {
     expect(sql).toContain('"EMAIL" VARCHAR(255) NOT NULL');
     expect(sql).toContain('"NAME" VARCHAR(255)'); // nullable: no NOT NULL
     expect(sql).toContain('PRIMARY KEY ("ID")');
+  });
+
+  it("emits SMALLINT booleans and a sequence+trigger on Firebird 2.1", () => {
+    const v21 = new FirebirdDialect({ version: "2.1" });
+    const ddl21 = new FirebirdDdl(v21);
+    const schema = parseScema21();
+    const create = ddl21.createTable(schema);
+    // identity column has no inline IDENTITY clause on 2.1
+    expect(create).not.toContain("IDENTITY");
+    expect(create).toContain('"ENABLED" SMALLINT');
+
+    const objs = ddl21.autoIncrementObjects(schema);
+    expect(objs.some((s) => /CREATE SEQUENCE/.test(s))).toBe(true);
+    const trigger = objs.find((s) => /CREATE TRIGGER/.test(s))!;
+    expect(trigger).toContain("BEFORE INSERT");
+    expect(trigger).toContain("GEN_ID(");
+    expect(trigger).toContain("NEW.\"ID\" IS NULL");
   });
 
   it("builds ALTER and FK statements", () => {
@@ -114,6 +141,18 @@ describe("planner", () => {
     const stmts = planMigration(diff, DESIRED, dialect);
     const body = renderMigrationSql(stmts);
     expect(splitStatements(body)).toEqual(stmts);
+  });
+
+  it("preserves PSQL trigger bodies (internal semicolons) across render/split", () => {
+    const stmts = [
+      'CREATE TABLE "T" ("ID" INTEGER NOT NULL)',
+      'CREATE TRIGGER "T_BI" FOR "T" ACTIVE BEFORE INSERT POSITION 0 AS\n' +
+        "BEGIN\n  IF (NEW.\"ID\" IS NULL) THEN NEW.\"ID\" = GEN_ID(GEN_T, 1);\nEND",
+    ];
+    const body = renderMigrationSql(stmts);
+    const split = splitStatements(body);
+    expect(split).toHaveLength(2);
+    expect(split[1]).toContain("GEN_ID(GEN_T, 1);"); // internal ; survived
   });
 });
 

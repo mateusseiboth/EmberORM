@@ -1,4 +1,4 @@
-import type { SqlValue } from "@ember/driver";
+import type { FirebirdVersion, SqlValue } from "@ember/driver";
 import { Sql } from "./fragment";
 
 /**
@@ -21,6 +21,12 @@ export interface SqlDialect {
   coerceValue(value: unknown): SqlValue;
   /** True if the dialect can paginate (controls FIRST/SKIP usage). */
   readonly supportsReturning: boolean;
+  /** Native BOOLEAN type (Firebird 3+) vs SMALLINT fallback (2.1/2.5). */
+  readonly supportsBooleanType: boolean;
+  /** IDENTITY columns (Firebird 3+) vs generator+trigger (2.1/2.5). */
+  readonly supportsIdentity: boolean;
+  /** DDL type used for boolean columns. */
+  booleanColumnType(): string;
 }
 
 /**
@@ -30,8 +36,26 @@ export interface SqlDialect {
  * - Pagination uses `FIRST n SKIP m` after the SELECT keyword.
  * - Case-insensitive matching uses UPPER() on both sides.
  */
+export interface FirebirdDialectOptions {
+  version?: FirebirdVersion;
+}
+
 export class FirebirdDialect implements SqlDialect {
   readonly supportsReturning = true;
+  readonly version: FirebirdVersion;
+  readonly supportsBooleanType: boolean;
+  readonly supportsIdentity: boolean;
+
+  constructor(options: FirebirdDialectOptions = {}) {
+    this.version = options.version ?? "3";
+    const rank = versionRank(this.version);
+    this.supportsBooleanType = rank >= 30;
+    this.supportsIdentity = rank >= 30;
+  }
+
+  booleanColumnType(): string {
+    return this.supportsBooleanType ? "BOOLEAN" : "SMALLINT";
+  }
 
   quoteId(name: string): string {
     // Escape embedded double quotes by doubling them.
@@ -76,12 +100,32 @@ export class FirebirdDialect implements SqlDialect {
     if (value === null || value === undefined) return null;
     if (value instanceof Date) return value;
     if (Buffer.isBuffer(value)) return value;
-    if (typeof value === "boolean") return value;
+    if (typeof value === "boolean") {
+      // Firebird 2.1/2.5 have no BOOLEAN type: store as SMALLINT 0/1.
+      return this.supportsBooleanType ? value : value ? 1 : 0;
+    }
     if (typeof value === "bigint") return value;
     if (typeof value === "number") return value;
     if (typeof value === "string") return value;
     // Json / objects are serialized to text.
     return JSON.stringify(value);
+  }
+}
+
+function versionRank(version: FirebirdVersion): number {
+  switch (version) {
+    case "2.1":
+      return 21;
+    case "2.5":
+      return 25;
+    case "3":
+      return 30;
+    case "4":
+      return 40;
+    case "5":
+      return 50;
+    default:
+      return 30;
   }
 }
 

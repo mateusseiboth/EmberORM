@@ -3,6 +3,7 @@ import Firebird from "node-firebird";
 import { DatabaseError } from "@ember/errors";
 import type {
   ConnectionConfig,
+  DriverOptions,
   IsolationLevel,
   SqlDriver,
   SqlValue,
@@ -59,10 +60,12 @@ export class FirebirdDriver implements SqlDriver {
   private pool: FbPool | null = null;
   private readonly options: Record<string, unknown>;
   private readonly poolMax: number;
+  private readonly onQuery?: DriverOptions["onQuery"];
   private readonly activeTx = new AsyncLocalStorage<TransactionContext>();
 
-  constructor(config: ConnectionConfig) {
+  constructor(config: ConnectionConfig, driverOptions?: DriverOptions) {
     this.poolMax = config.poolMax ?? 5;
+    this.onQuery = driverOptions?.onQuery;
     this.options = {
       host: config.host,
       port: config.port,
@@ -75,6 +78,12 @@ export class FirebirdDriver implements SqlDriver {
       blobAsText: config.blobAsText ?? true,
       lowercase_keys: config.lowercaseKeys ?? false,
       retryConnectionInterval: 1000,
+      // FB3+ secure auth (Srp) is negotiated by default; set explicitly to force
+      // a plugin, or "Legacy_Auth" for Firebird 2.1/2.5 servers.
+      ...(config.authPlugin ? { pluginName: config.authPlugin } : {}),
+      ...(config.wireCompression != null
+        ? { wireCompression: config.wireCompression }
+        : {}),
     };
   }
 
@@ -144,10 +153,20 @@ export class FirebirdDriver implements SqlDriver {
     sql: string,
     params: readonly SqlValue[] = [],
   ): Promise<T[]> {
+    const start = this.onQuery ? performance.now() : 0;
     return new Promise((resolve, reject) => {
       tr.query(sql, [...params], (err, result) => {
         if (err) return reject(wrap(err, "Query failed", sql));
-        resolve(normalizeRows<T>(result));
+        const rows = normalizeRows<T>(result);
+        if (this.onQuery) {
+          this.onQuery({
+            sql,
+            params,
+            durationMs: performance.now() - start,
+            rowCount: rows.length,
+          });
+        }
+        resolve(rows);
       });
     });
   }

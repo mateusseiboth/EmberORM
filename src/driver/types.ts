@@ -17,7 +17,22 @@ export interface ConnectionConfig {
   poolMax?: number;
   blobAsText?: boolean;
   lowercaseKeys?: boolean;
+  /**
+   * Authentication plugin. Firebird 3+ defaults to "Srp" (secure remote
+   * password) and is negotiated automatically; use "Legacy_Auth" for legacy
+   * Firebird 2.1/2.5 servers.
+   */
+  authPlugin?: "Srp" | "Legacy_Auth";
+  /** Enable wire compression (Firebird 3+). */
+  wireCompression?: boolean;
+  /**
+   * Target server major version, used to pick version-specific SQL/DDL
+   * (e.g. BOOLEAN vs SMALLINT, IDENTITY vs generator+trigger). Defaults to 3.
+   */
+  version?: FirebirdVersion;
 }
+
+export type FirebirdVersion = "2.1" | "2.5" | "3" | "4" | "5";
 
 export type SqlValue =
   | string
@@ -42,6 +57,22 @@ export type IsolationLevel =
   | "READ_COMMITTED_READ_ONLY"
   | "REPEATABLE_READ"
   | "SERIALIZABLE";
+
+/** Emitted once per executed statement when a logger is configured. */
+export interface QueryEvent {
+  sql: string;
+  params: readonly SqlValue[];
+  durationMs: number;
+  /** Number of rows returned (selects) or affected-ish (best-effort). */
+  rowCount: number;
+}
+
+export type QueryLogger = (event: QueryEvent) => void;
+
+export interface DriverOptions {
+  /** Called after each statement completes (used by the client `log` option). */
+  onQuery?: QueryLogger;
+}
 
 export interface TransactionOptions {
   isolation?: IsolationLevel;

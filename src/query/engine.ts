@@ -199,8 +199,9 @@ export class QueryEngine {
       const exec = this.execOn(tx);
       const count = await this.countMatching(model, args.where, exec);
       const writer = new WriteProcessor(this.schema, this.dialect, exec);
-      // updateMany only sets scalar fields; apply to the whole matched set.
-      await writer.updateRow(model, args.where ?? {}, args.data, {});
+      // updateMany is scalar-only (atomic operators allowed); relation writes
+      // are rejected. Applies to the whole matched set.
+      await writer.updateManyRows(model, args.where, args.data);
       return { count };
     });
   }

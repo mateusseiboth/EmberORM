@@ -8,7 +8,12 @@ import {
   resolveDatasourceUrl,
   validateSchema,
 } from "@ember/schema";
-import { createDriver, type SqlDriver } from "@ember/driver";
+import {
+  createDriver,
+  parseConnectionUrl,
+  type SqlDriver,
+} from "@ember/driver";
+import { FirebirdDialect } from "@ember/sql";
 import { Introspector } from "@ember/introspect";
 import { writeClient } from "@ember/generator";
 import { Migrator } from "@ember/migrate";
@@ -219,10 +224,12 @@ async function withMigrator(
   }
 
   const migrationsDir = resolve(dirname(path), "migrations");
-  const driver: SqlDriver = createDriver(url);
+  const config = parseConnectionUrl(url);
+  const dialect = new FirebirdDialect({ version: config.version });
+  const driver: SqlDriver = createDriver(config);
   try {
     await driver.connect();
-    const migrator = new Migrator(driver, document, migrationsDir);
+    const migrator = new Migrator(driver, document, migrationsDir, dialect);
     return await fn(migrator);
   } finally {
     await driver.disconnect();

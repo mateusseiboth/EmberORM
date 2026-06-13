@@ -39,6 +39,38 @@ describe("connection url", () => {
     expect(cfg.user).toBe("u");
     expect(cfg.database).toBe("/d.fdb");
   });
+
+  it("parses auth plugin, wire compression and version", () => {
+    const cfg = parseConnectionUrl(
+      "firebird://SYSDBA:masterkey@h:3050//db.fdb?auth=legacy&wireCompression=true&version=2.5",
+    );
+    expect(cfg.authPlugin).toBe("Legacy_Auth");
+    expect(cfg.wireCompression).toBe(true);
+    expect(cfg.version).toBe("2.5");
+
+    const srp = parseConnectionUrl("firebird://u:p@h//db.fdb?authPlugin=srp&version=4.0");
+    expect(srp.authPlugin).toBe("Srp");
+    expect(srp.version).toBe("4");
+  });
+});
+
+describe("firebird dialect versions", () => {
+  it("uses BOOLEAN and IDENTITY on Firebird 3+", () => {
+    const d = new FirebirdDialect({ version: "3" });
+    expect(d.supportsBooleanType).toBe(true);
+    expect(d.supportsIdentity).toBe(true);
+    expect(d.booleanColumnType()).toBe("BOOLEAN");
+    expect(d.coerceValue(true)).toBe(true);
+  });
+
+  it("falls back to SMALLINT 0/1 and generators on Firebird 2.1", () => {
+    const d = new FirebirdDialect({ version: "2.1" });
+    expect(d.supportsBooleanType).toBe(false);
+    expect(d.supportsIdentity).toBe(false);
+    expect(d.booleanColumnType()).toBe("SMALLINT");
+    expect(d.coerceValue(true)).toBe(1);
+    expect(d.coerceValue(false)).toBe(0);
+  });
 });
 
 describe("firebird dialect", () => {

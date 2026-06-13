@@ -232,6 +232,31 @@ describe("query engine writes", () => {
     expect(updateCall.params.slice(0, 2)).toEqual([3, 0]);
   });
 
+  it("updateMany applies scalar/atomic updates and counts matched rows", async () => {
+    const driver = new MockDriver([
+      [/COUNT/, () => [{ _count: 4 }]],
+      [/UPDATE "POST"/, () => []],
+    ]);
+    const engine = new QueryEngine(doc, dialect, driver);
+    const res = await engine.updateMany("Post", {
+      where: { authorId: 1 },
+      data: { title: { set: "x" } },
+    });
+    expect(res.count).toBe(4);
+    expect(driver.calls.some((c) => /UPDATE "POST"/.test(c.sql))).toBe(true);
+  });
+
+  it("updateMany rejects nested relation writes", async () => {
+    const driver = new MockDriver([[/COUNT/, () => [{ _count: 0 }]]]);
+    const engine = new QueryEngine(doc, dialect, driver);
+    await expect(
+      engine.updateMany("Post", {
+        where: {},
+        data: { author: { connect: { id: 1 } } } as any,
+      }),
+    ).rejects.toThrow(/does not support nested relation writes/i);
+  });
+
   it("rejects an atomic operator on a non-numeric field", async () => {
     const driver = new MockDriver([
       [/FROM "USERS"/, () => [{ id: 1, email: "a", name: "n" }]],

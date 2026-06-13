@@ -11,8 +11,8 @@ Current, honest status of the implementation.
 
 ## Known limitations
 
-- **`updateMany` with nested writes**: only scalar fields are applied to the
-  matched set; nested relation writes in `updateMany` are not processed.
+- **`updateMany`** is scalar-only (atomic operators allowed), like Prisma;
+  nested relation writes are rejected with a clear error.
 - **`cursor`** supports a single unique field; multi-field cursors throw.
 - **`distinct`** de-duplicates in memory (and therefore paginates in memory),
   rather than via a SQL window function.
@@ -30,6 +30,10 @@ Current, honest status of the implementation.
 
 ## Recently completed
 
+- **Firebird 2.1/2.5 support**: `SMALLINT` booleans and sequence+trigger
+  autoincrement via a version-aware dialect (`?version=2.1`); secure **Srp** auth
+  (default on FB3+) and legacy auth (`?auth=legacy`); query **logging** via the
+  `log` client option.
 - **Relation `_count`**: `select`/`include` `_count` (boolean or
   `{ select: { rel } }`) attaches per-relation child counts via a batched
   `GROUP BY`; typed in the generated client against to-many relations.

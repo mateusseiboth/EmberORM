@@ -1,5 +1,9 @@
 export type {
   ConnectionConfig,
+  FirebirdVersion,
+  DriverOptions,
+  QueryEvent,
+  QueryLogger,
   SqlDriver,
   SqlValue,
   TransactionContext,
@@ -9,7 +13,7 @@ export type {
 export { FirebirdDriver } from "./firebird-driver";
 export { parseConnectionUrl, buildConnectionUrl } from "./url";
 
-import type { ConnectionConfig, SqlDriver } from "./types";
+import type { ConnectionConfig, DriverOptions, SqlDriver } from "./types";
 import { FirebirdDriver } from "./firebird-driver";
 import { parseConnectionUrl } from "./url";
 
@@ -20,8 +24,9 @@ import { parseConnectionUrl } from "./url";
  */
 export function createDriver(
   source: string | ConnectionConfig,
+  options?: DriverOptions,
 ): SqlDriver {
   const config =
     typeof source === "string" ? parseConnectionUrl(source) : source;
-  return new FirebirdDriver(config);
+  return new FirebirdDriver(config, options);
 }

@@ -50,7 +50,32 @@ export function parseConnectionUrl(url: string): ConnectionConfig {
   const pageSize = params.get("pageSize");
   if (pageSize) config.pageSize = Number(pageSize);
 
+  const auth = (params.get("authPlugin") ?? params.get("auth"))?.toLowerCase();
+  if (auth === "legacy" || auth === "legacy_auth") config.authPlugin = "Legacy_Auth";
+  else if (auth === "srp") config.authPlugin = "Srp";
+
+  const wireCompression = params.get("wireCompression");
+  if (wireCompression != null) {
+    config.wireCompression = wireCompression !== "false" && wireCompression !== "0";
+  }
+
+  const version = params.get("version");
+  if (version) config.version = normalizeVersion(version);
+
   return config;
+}
+
+const VERSIONS = new Set(["2.1", "2.5", "3", "4", "5"]);
+
+function normalizeVersion(raw: string): ConnectionConfig["version"] {
+  const trimmed = raw.trim();
+  if (VERSIONS.has(trimmed)) return trimmed as ConnectionConfig["version"];
+  // Accept "3.0", "4.0.1" etc. by taking the major (or major.minor for 2.x).
+  if (/^2\.1/.test(trimmed)) return "2.1";
+  if (/^2\.5/.test(trimmed)) return "2.5";
+  const major = trimmed.split(".")[0];
+  if (major && VERSIONS.has(major)) return major as ConnectionConfig["version"];
+  return undefined;
 }
 
 function normalizeDatabasePath(pathname: string): string {

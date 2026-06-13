@@ -1,7 +1,11 @@
 import type { SchemaDocument } from "@ember/ast";
 import {
   createDriver,
+  parseConnectionUrl,
   type ConnectionConfig,
+  type DriverOptions,
+  type QueryEvent,
+  type QueryLogger,
   type SqlDriver,
   type TransactionOptions,
 } from "@ember/driver";
@@ -13,6 +17,7 @@ import { lowerFirst } from "@ember/utils";
 import { createDelegate, type ModelDelegate } from "./delegate";
 
 export type { ModelDelegate } from "./delegate";
+export type { QueryEvent, QueryLogger } from "@ember/driver";
 
 export interface ClientOptions {
   /** Connection URL or explicit config. Overrides the schema datasource. */
@@ -20,7 +25,11 @@ export interface ClientOptions {
   datasource?: ConnectionConfig;
   /** A pre-parsed schema document (the generated client passes its own). */
   schema: SchemaDocument;
-  log?: boolean;
+  /**
+   * Query logging: `true` logs each statement to the console; pass a function
+   * to receive structured `QueryEvent`s (sql, params, durationMs, rowCount).
+   */
+  log?: boolean | QueryLogger;
 }
 
 /**
@@ -40,7 +49,6 @@ export class EmberClientBase {
 
   constructor(options: ClientOptions) {
     this.schema = options.schema;
-    this.dialect = new FirebirdDialect();
 
     const url =
       options.datasourceUrl ?? resolveDatasourceUrl(options.schema, process.cwd());
@@ -49,7 +57,16 @@ export class EmberClientBase {
         "No datasource configured. Provide datasourceUrl, datasource, or a datasource block with a resolvable url.",
       );
     }
-    this.driver = createDriver(options.datasource ?? url!);
+    const config: ConnectionConfig =
+      options.datasource ?? parseConnectionUrl(url!);
+
+    this.dialect = new FirebirdDialect({ version: config.version });
+
+    const driverOptions: DriverOptions = {};
+    const onQuery = buildLogger(options.log);
+    if (onQuery) driverOptions.onQuery = onQuery;
+
+    this.driver = createDriver(config, driverOptions);
     this.engine = new QueryEngine(options.schema, this.dialect, this.driver);
 
     for (const model of options.schema.models) {
@@ -159,6 +176,21 @@ function buildTemplate(
 
 function toSqlValue(v: unknown): never {
   return v as never;
+}
+
+/** Resolve the `log` option into a driver query hook. */
+function buildLogger(
+  log: ClientOptions["log"],
+): QueryLogger | undefined {
+  if (!log) return undefined;
+  if (typeof log === "function") return log;
+  return (e: QueryEvent) => {
+    const params = e.params.length ? ` -- ${JSON.stringify(e.params)}` : "";
+    // eslint-disable-next-line no-console
+    console.log(
+      `ember:query (${e.durationMs.toFixed(1)}ms, ${e.rowCount} rows) ${e.sql}${params}`,
+    );
+  };
 }
 
 /**

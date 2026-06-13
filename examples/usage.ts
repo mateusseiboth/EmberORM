@@ -5,7 +5,10 @@
 import { EmberClient } from "../generated";
 
 const db = new EmberClient({
+  // Firebird 3+ uses secure SRP auth automatically; add ?version=2.5&auth=legacy
+  // for legacy Firebird 2.1/2.5 servers.
   datasourceUrl: "firebird://SYSDBA:masterkey@localhost:3050//var/lib/firebird/app.fdb",
+  log: (e) => console.log(`${e.sql} (${e.durationMs}ms, ${e.rowCount} rows)`),
 });
 
 async function main() {

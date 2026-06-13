@@ -1,6 +1,6 @@
 import { type SqlDialect } from "@ember/sql";
-import { type SchemaDocument, modelTable } from "@ember/ast";
-import { FirebirdDdl } from "./ddl";
+import { type SchemaDocument, fieldColumn, modelTable } from "@ember/ast";
+import { FirebirdDdl, isIdentity } from "./ddl";
 import {
   type SchemaDiff,
   constraintName,
@@ -41,6 +41,8 @@ export function planMigration(
   for (const model of diff.createdModels) {
     const table = modelTable(model);
     creates.push(ddl.createTable(model));
+    // Firebird 2.1/2.5: sequence + BEFORE INSERT trigger for autoincrement.
+    creates.push(...ddl.autoIncrementObjects(model));
     for (const cols of uniqueColumnSets(model)) {
       // Single-column @unique already implies a unique index; skip to avoid
       // a redundant constraint. Composite @@unique becomes a constraint.
@@ -71,6 +73,11 @@ export function planMigration(
   for (const change of diff.modelChanges) {
     for (const field of change.addedColumns) {
       alters.push(ddl.addColumn(change.table, field));
+      if (isIdentity(field)) {
+        creates.push(
+          ...ddl.autoIncrementForColumn(change.table, fieldColumn(field)),
+        );
+      }
     }
     for (const cc of change.changedColumns) {
       if (cc.typeChanged) alters.push(ddl.alterColumnType(cc.table, cc.field));
@@ -113,17 +120,24 @@ export function planMigration(
   ];
 }
 
+/**
+ * Statements are separated by an explicit breakpoint line rather than `;`, so
+ * PSQL bodies (triggers/procedures) that contain internal semicolons survive a
+ * round-trip through the `.sql` file.
+ */
+const BREAKPOINT = "--> statement-breakpoint";
+
 /** Render DDL statements as a `.sql` migration file body. */
 export function renderMigrationSql(statements: string[]): string {
   if (statements.length === 0) return "-- This migration is empty.\n";
-  return statements.map((s) => `${s};`).join("\n\n") + "\n";
+  return statements.join(`\n${BREAKPOINT}\n`) + "\n";
 }
 
 /** Split a migration `.sql` body back into executable statements. */
 export function splitStatements(sql: string): string[] {
   return sql
-    .split(/;\s*(?:\r?\n|$)/)
-    .map((s) => stripComments(s).trim())
+    .split(BREAKPOINT)
+    .map((s) => stripComments(s).trim().replace(/;\s*$/, "").trim())
     .filter((s) => s.length > 0);
 }
 
