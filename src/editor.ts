@@ -8,6 +8,8 @@ export {
   parseAndValidate,
   validateSchema,
   printSchema,
+  formatSchema,
+  completeRelations,
   type LoadedSchema,
 } from "@ember/schema";
 

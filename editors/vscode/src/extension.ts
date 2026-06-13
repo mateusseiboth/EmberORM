@@ -1,9 +1,7 @@
 import * as vscode from "vscode";
 import {
   parseAndValidate,
-  parseSchema,
-  printSchema,
-  validateSchema,
+  formatSchema,
   SchemaParseError,
   SchemaValidationError,
   SCALAR_TYPES,
@@ -34,12 +32,16 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.workspace.onDidCloseTextDocument((doc) => diagnostics.delete(doc.uri)),
   );
 
-  // Formatting: parse then re-print the canonical schema.
+  // Formatting: auto-complete missing relation sides, fix indentation, and
+  // re-print the canonical schema (identical to `ember format`). Combined with
+  // editor.formatOnSave this fixes indentation and adds the parent-side relation
+  // automatically on save, just like Prisma.
   context.subscriptions.push(
     vscode.languages.registerDocumentFormattingEditProvider(LANGUAGE, {
       provideDocumentFormattingEdits(doc) {
         try {
-          const formatted = printSchema(validatedDoc(doc.getText()));
+          const formatted = formatSchema(doc.getText());
+          if (formatted === doc.getText()) return [];
           return [vscode.TextEdit.replace(fullRange(doc), formatted)];
         } catch {
           // Surface the error via diagnostics; do not reformat invalid input.
@@ -99,12 +101,6 @@ function computeDiagnostics(doc: vscode.TextDocument): vscode.Diagnostic[] {
     }
     return [diag(firstLine(doc), String((err as Error).message ?? err), vscode.DiagnosticSeverity.Error)];
   }
-}
-
-function validatedDoc(text: string) {
-  const doc = parseSchema(text);
-  validateSchema(doc);
-  return doc;
 }
 
 function diag(

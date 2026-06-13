@@ -2,11 +2,10 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import {
   findSchemaPath,
+  formatSchema,
   loadSchema,
-  parseSchema,
   printSchema,
   resolveDatasourceUrl,
-  validateSchema,
 } from "@ember/schema";
 import {
   createDriver,
@@ -69,14 +68,15 @@ export function validate(ctx: CliContext, schemaPath?: string): number {
   return 0;
 }
 
-/** `ember format` — re-print the schema with canonical formatting. */
+/**
+ * `ember format` — auto-complete missing relation sides and re-print the schema
+ * with canonical formatting (like Prisma's formatter).
+ */
 export function format(ctx: CliContext, schemaPath?: string): number {
   const path = requireSchema(ctx, schemaPath);
   if (!path) return 1;
   const source = readFileSync(path, "utf8");
-  const doc = parseSchema(source, path);
-  validateSchema(doc);
-  writeFileSync(path, printSchema(doc), "utf8");
+  writeFileSync(path, formatSchema(source, path), "utf8");
   ctx.log(`Formatted ${rel(ctx.cwd, path)}`);
   return 0;
 }

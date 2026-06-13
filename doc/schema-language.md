@@ -71,3 +71,19 @@ onUpdate: NoAction)`. Referential actions: `Cascade`, `Restrict`, `NoAction`,
 `ember validate` (and every load) checks: unique model/field names, known field
 types, relation field references, and that every model has a primary key.
 Errors are reported together with file/line positions.
+
+## Formatting & relation auto-completion
+
+`ember format` (and the VSCode formatter / format-on-save) re-prints the schema
+with aligned columns and canonical indentation, and — like Prisma —
+auto-completes the missing side of a relation:
+
+- declare the owning side and the referenced model gains the back-relation
+  (`posts Post[]`, or a nullable to-one for a 1:1 unique FK);
+- declare a list (`posts Post[]`) and the element model gains the owning field
+  plus its scalar foreign key;
+- a bare to-one (`author User`) is upgraded to the owning side with a generated
+  FK, and the other model gets the back-relation.
+
+Relation names (`@relation("Name")`) are preserved on both sides. The operation
+is idempotent — formatting an already-complete schema changes nothing.

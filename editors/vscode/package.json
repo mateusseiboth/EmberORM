@@ -66,6 +66,12 @@
           "description": "Command used to run the Ember CLI for generate/db pull."
         }
       }
+    },
+    "configurationDefaults": {
+      "[ember]": {
+        "editor.defaultFormatter": "ember-orm.ember-orm-vscode",
+        "editor.formatOnSave": true
+      }
     }
   },
   "scripts": {

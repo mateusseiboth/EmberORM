@@ -4,11 +4,21 @@ import type { SchemaDocument } from "@ember/ast";
 import { Parser } from "./parser";
 import { validateSchema } from "./validator";
 import { printSchema } from "./printer";
+import { completeRelations } from "./relations-complete";
 
 export { Parser } from "./parser";
 export { Lexer } from "./lexer";
-export { validateSchema } from "./validator";
-export { printSchema } from "./printer";
+export { validateSchema, printSchema, completeRelations };
+
+/**
+ * Canonical formatter: parse, auto-complete missing relation sides (like
+ * Prisma's formatter), validate, and re-print with aligned formatting.
+ */
+export function formatSchema(source: string, file?: string): string {
+  const doc = completeRelations(parseSchema(source, file));
+  validateSchema(doc);
+  return printSchema(doc);
+}
 
 /** Parse schema source text into an AST (no validation). */
 export function parseSchema(source: string, file?: string): SchemaDocument {
