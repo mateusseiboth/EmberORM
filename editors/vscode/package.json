@@ -4,7 +4,7 @@
   "description": "Language server for EmberORM `.ember` schema files: highlighting, diagnostics, formatting (with relation auto-completion), go-to-definition, references, rename, symbols, code actions and completion.",
   "version": "0.1.0",
   "license": "MIT",
-  "publisher": "ember-orm",
+    "publisher": "MateusSeiboth",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mateusseiboth/EmberORM.git",
