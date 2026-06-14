@@ -5,6 +5,15 @@
   "version": "0.1.0",
   "license": "MIT",
   "publisher": "ember-orm",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mateusseiboth/EmberORM.git",
+    "directory": "editors/vscode"
+  },
+  "homepage": "https://github.com/mateusseiboth/EmberORM#readme",
+  "bugs": {
+    "url": "https://github.com/mateusseiboth/EmberORM/issues"
+  },
   "engines": {
     "vscode": "^1.75.0"
   },

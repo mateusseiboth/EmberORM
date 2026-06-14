@@ -3,6 +3,15 @@
   "version": "0.1.0",
   "description": "Prisma-like ORM for Firebird. Schema, db pull, generated types, typed query API.",
   "license": "MIT",
+  "author": "Mateus Seiboth",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mateusseiboth/EmberORM.git"
+  },
+  "homepage": "https://github.com/mateusseiboth/EmberORM#readme",
+  "bugs": {
+    "url": "https://github.com/mateusseiboth/EmberORM/issues"
+  },
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
