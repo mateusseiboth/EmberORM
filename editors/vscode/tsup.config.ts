@@ -12,7 +12,7 @@ export default defineConfig({
   // the language-server libraries) so the extension ships self-contained.
   external: ["vscode"],
   noExternal: [
-    "ember-orm",
+    "@mateusseiboth/ember-orm",
     "vscode-languageclient",
     "vscode-languageserver",
     "vscode-languageserver-textdocument",

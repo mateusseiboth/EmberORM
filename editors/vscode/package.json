@@ -4,7 +4,7 @@
   "description": "Language server for EmberORM `.ember` schema files: highlighting, diagnostics, formatting (with relation auto-completion), go-to-definition, references, rename, symbols, code actions and completion.",
   "version": "0.1.0",
   "license": "MIT",
-    "publisher": "MateusSeiboth",
+  "publisher": "MateusSeiboth",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mateusseiboth/EmberORM.git",
@@ -15,7 +15,7 @@
     "url": "https://github.com/mateusseiboth/EmberORM/issues"
   },
   "engines": {
-    "vscode": "^1.75.0"
+    "vscode": "^1.82.0"
   },
   "categories": ["Programming Languages", "Snippets", "Formatters"],
   "keywords": ["ember", "emberorm", "firebird", "orm", "prisma", "schema"],
@@ -78,7 +78,7 @@
     },
     "configurationDefaults": {
       "[ember]": {
-        "editor.defaultFormatter": "ember-orm.ember-orm-vscode",
+        "editor.defaultFormatter": "MateusSeiboth.ember-orm-vscode",
         "editor.formatOnSave": true
       }
     }
@@ -90,14 +90,14 @@
     "vscode:prepublish": "tsup"
   },
   "dependencies": {
-    "ember-orm": "file:../..",
+    "@mateusseiboth/ember-orm": "file:../..",
     "vscode-languageclient": "^9.0.1",
     "vscode-languageserver": "^9.0.1",
     "vscode-languageserver-textdocument": "^1.0.12"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "@types/vscode": "^1.75.0",
+    "@types/vscode": "^1.82.0",
     "tsup": "^8.3.0",
     "typescript": "^5.6.0"
   }

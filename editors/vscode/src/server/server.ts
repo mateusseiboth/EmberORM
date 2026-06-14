@@ -24,7 +24,7 @@ import {
   SchemaParseError,
   SchemaValidationError,
   SCALAR_TYPES,
-} from "ember-orm/editor";
+} from "@mateusseiboth/ember-orm/editor";
 import {
   buildIndex,
   blockAt,

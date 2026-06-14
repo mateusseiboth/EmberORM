@@ -5,7 +5,7 @@ database introspection (`db pull`), generated typed client, and an object-based
 query API (`where`, `select`, `include`, `orderBy`, aggregations, transactions).
 
 ```bash
-npm install ember-orm
+npm install @mateusseiboth/ember-orm
 ```
 
 ## Quick start
