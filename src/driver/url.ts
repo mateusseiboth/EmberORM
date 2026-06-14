@@ -7,10 +7,14 @@ import type { ConnectionConfig } from "./types";
  * Supported forms:
  *   firebird://user:password@host:port/path/to/database.fdb?role=RDB$ADMIN
  *   firebird://SYSDBA:masterkey@localhost:3050//var/lib/firebird/data/app.fdb
+ *   firebird://SYSDBA:masterkey@localhost:3050/MYALIAS          ← Firebird alias (auto-detected)
+ *   firebird://SYSDBA:masterkey@localhost:3050?alias=MYALIAS    ← Firebird alias (explicit)
  *
  * The path after the host is treated as the absolute database path. A leading
  * double slash (`//var/...`) yields an absolute POSIX path; a single slash with
- * a Windows drive (`/C:/...`) is normalized too.
+ * a Windows drive (`/C:/...`) is normalized too. A single path segment with no
+ * dots or sub-directories is treated as a Firebird alias (resolved server-side
+ * via aliases.conf / databases.conf).
  */
 export function parseConnectionUrl(url: string): ConnectionConfig {
   let parsed: URL;
@@ -28,12 +32,15 @@ export function parseConnectionUrl(url: string): ConnectionConfig {
     }
   }
 
-  const database = normalizeDatabasePath(parsed.pathname);
+  const params = parsed.searchParams;
+  // Explicit ?alias= param takes precedence over the URL path.
+  const database = params.get("alias") ?? resolveDatabasePath(parsed.pathname);
   if (!database) {
-    throw new EmberError(`Connection URL is missing a database path: ${url}`);
+    throw new EmberError(
+      `Connection URL requires a database path or ?alias=NAME: ${url}`,
+    );
   }
 
-  const params = parsed.searchParams;
   const config: ConnectionConfig = {
     host: parsed.hostname || "127.0.0.1",
     port: parsed.port ? Number(parsed.port) : 3050,
@@ -78,12 +85,22 @@ function normalizeVersion(raw: string): ConnectionConfig["version"] {
   return undefined;
 }
 
-function normalizeDatabasePath(pathname: string): string {
-  let p = decodeURIComponent(pathname);
-  // `//var/lib/app.fdb` -> `/var/lib/app.fdb`
-  if (p.startsWith("//")) p = p.slice(1);
-  // `/C:/db.fdb` -> `C:/db.fdb`
-  if (/^\/[A-Za-z]:\//.test(p)) p = p.slice(1);
+/**
+ * Resolve the URL pathname to a database path or alias name.
+ *
+ * - Single identifier (e.g. `/MYALIAS`) → Firebird alias (`MYALIAS`)
+ * - Double-slash prefix (`//var/lib/app.fdb`) → absolute POSIX path (`/var/lib/app.fdb`)
+ * - Windows drive (`/C:/db.fdb`) → `C:/db.fdb`
+ * - All other paths are returned as-is.
+ */
+function resolveDatabasePath(pathname: string): string {
+  const p = decodeURIComponent(pathname);
+  // Single identifier with no sub-path or extension → Firebird alias
+  if (/^\/[A-Za-z][A-Za-z0-9_]*$/.test(p)) return p.slice(1);
+  // Absolute POSIX path via double-slash: //var/lib/app.fdb → /var/lib/app.fdb
+  if (p.startsWith("//")) return p.slice(1);
+  // Windows absolute path: /C:/db.fdb → C:/db.fdb
+  if (/^\/[A-Za-z]:\//.test(p)) return p.slice(1);
   return p;
 }
 
@@ -91,10 +108,10 @@ export function buildConnectionUrl(config: ConnectionConfig): string {
   const auth = `${encodeURIComponent(config.user)}:${encodeURIComponent(
     config.password,
   )}`;
-  const dbPath = config.database.startsWith("/")
-    ? `/${config.database}`
-    : `/${config.database}`;
+  const isAlias = !config.database.includes("/");
+  const dbPath = isAlias ? "" : `/${config.database}`;
   const url = new URL(`firebird://${auth}@${config.host}:${config.port}${dbPath}`);
   if (config.role) url.searchParams.set("role", config.role);
+  if (isAlias) url.searchParams.set("alias", config.database);
   return url.toString();
 }
