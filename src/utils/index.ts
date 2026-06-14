@@ -1,5 +1,7 @@
 /** Small, dependency-free helpers shared across layers. */
 
+export { loadEnv, parseEnv } from "./env";
+
 export function isPlainObject(v: unknown): v is Record<string, unknown> {
   return (
     typeof v === "object" &&

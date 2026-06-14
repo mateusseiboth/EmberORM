@@ -40,6 +40,36 @@ describe("connection url", () => {
     expect(cfg.database).toBe("/d.fdb");
   });
 
+  it("auto-detects a Firebird alias from a single-segment path", () => {
+    const cfg = parseConnectionUrl(
+      "firebird://SYSDBA:masterkey@10.1.2.51:45923/SACQUALITY_TESTE?auth=legacy",
+    );
+    expect(cfg.database).toBe("SACQUALITY_TESTE");
+    expect(cfg.host).toBe("10.1.2.51");
+    expect(cfg.port).toBe(45923);
+    expect(cfg.authPlugin).toBe("Legacy_Auth");
+  });
+
+  it("accepts an explicit ?alias= param", () => {
+    const cfg = parseConnectionUrl(
+      "firebird://SYSDBA:masterkey@10.1.2.51:3050?alias=SACQUALITY_TESTE",
+    );
+    expect(cfg.database).toBe("SACQUALITY_TESTE");
+  });
+
+  it("round-trips an alias through buildConnectionUrl", () => {
+    const url = buildConnectionUrl({
+      host: "h",
+      port: 3050,
+      user: "u",
+      password: "p",
+      database: "SACQUALITY_TESTE",
+    });
+    expect(url).toContain("alias=SACQUALITY_TESTE");
+    const cfg = parseConnectionUrl(url);
+    expect(cfg.database).toBe("SACQUALITY_TESTE");
+  });
+
   it("parses auth plugin, wire compression and version", () => {
     const cfg = parseConnectionUrl(
       "firebird://SYSDBA:masterkey@h:3050//db.fdb?auth=legacy&wireCompression=true&version=2.5",

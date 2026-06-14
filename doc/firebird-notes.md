@@ -29,6 +29,65 @@ firebird://SYSDBA:masterkey@host:3050//db.fdb?wireCompression=true
 
 or via config: `authPlugin: "Srp" | "Legacy_Auth"`, `wireCompression: boolean`.
 
+`Legacy_Auth` works against a Firebird 3+ server as long as the server still has
+the legacy plugin enabled, so `?auth=legacy` is safe on mixed/legacy installs.
+
+## Database aliases (aliases.conf / databases.conf)
+
+Firebird servers can expose a database under a server-side **alias** instead of a
+filesystem path (configured in `aliases.conf` on FB 2.5 or `databases.conf` on
+FB 3+). The wire protocol expects the alias name **without** a leading slash;
+sending `/MYALIAS` makes the server try to open a file literally named
+`/MYALIAS`.
+
+`parseConnectionUrl` (`src/driver/url.ts`) resolves this automatically:
+
+```text
+firebird://SYSDBA:pw@host:3050/SACQUALITY_TESTE          # single segment → alias "SACQUALITY_TESTE"
+firebird://SYSDBA:pw@host:3050?alias=SACQUALITY_TESTE    # explicit alias param (wins over the path)
+firebird://SYSDBA:pw@host:3050//var/lib/app.fdb          # double slash → absolute path /var/lib/app.fdb
+firebird://SYSDBA:pw@host:3050/C:/db.fdb                 # Windows absolute path
+```
+
+A single path segment matching `/[A-Za-z][A-Za-z0-9_]*` (no dots, no sub-path)
+is treated as an alias and the leading slash is stripped. Use `?alias=` to force
+alias semantics in ambiguous cases. `buildConnectionUrl` round-trips aliases via
+`?alias=`.
+
+## `.env` loading (CLI)
+
+Node (unlike Bun) does not auto-load `.env`, so the `ember` CLI loads it at
+startup via `loadEnv()` (`src/utils/env.ts`) before resolving
+`env("DATABASE_URL")`. It walks up from the cwd to the filesystem root looking
+for the first `.env`, and never overwrites a variable already set in the real
+environment. Quoted values keep `#`/`=` (important for Firebird URLs whose
+passwords or query strings contain them).
+
+## Introspection gotchas (db pull)
+
+`FirebirdMetadataReader` (`src/introspect/firebird-meta.ts`) reads the `RDB$`
+system catalog. Three Firebird-specific traps, all handled there:
+
+1. **Reserved-word aliases.** `CHAR_LENGTH` / `CHARACTER_LENGTH` are reserved, so
+   the column-length alias is `CHAR_LEN` (not `CHAR_LENGTH`) — an unquoted
+   reserved word raises `SQL error code = -104, Token unknown`.
+2. **Version-only columns.** `RDB$IDENTITY_TYPE` exists only on Firebird 3.0+.
+   The reader detects the engine version via
+   `rdb$get_context('SYSTEM','ENGINE_VERSION')` and only selects it when major
+   ≥ 3 (falls back to the conservative subset if the context var is missing).
+3. **BLOB columns crash node-firebird.** `RDB$DEFAULT_SOURCE` is a BLOB.
+   node-firebird 1.1.9 throws an *uncatchable* `TypeError: Cannot read properties
+   of undefined (reading 'statement')` from its socket read callback while
+   decoding BLOB columns in a multi-row result set, killing the whole process.
+   The query therefore `CAST(... AS VARCHAR(8191))` so the server sends a VARCHAR
+   instead of a BLOB. Avoid selecting raw BLOB columns in any introspection/bulk
+   query for the same reason.
+
+Note: legacy databases often contain tables with **no primary key** (e.g. audit
+log tables like `IBE$LOG_*`). `db pull` introspects them, but schema validation
+requires every model to have `@id`/`@@id`, so such models need a manual key or
+removal before `ember generate`.
+
 ## Query logging
 
 Pass `log` to the client: `true` prints each statement to the console; a
@@ -39,7 +98,6 @@ function receives a structured `QueryEvent` (`sql`, `params`, `durationMs`,
 new EmberClient({ log: true });
 new EmberClient({ log: (e) => metrics.observe(e.durationMs) });
 ```
-
 
 ## Identifier casing (important)
 

@@ -2,6 +2,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { EmberError } from "@ember/errors";
+import { loadEnv } from "@ember/utils";
 import {
   type CliContext,
   dbPull,
@@ -69,6 +70,8 @@ function parseArgs(argv: string[]): ParsedArgs {
 }
 
 async function main(): Promise<number> {
+  // Node does not auto-load `.env`; do it before resolving env("DATABASE_URL").
+  loadEnv();
   const { command, flags } = parseArgs(process.argv.slice(2));
   const ctx: CliContext = {
     cwd: process.cwd(),
