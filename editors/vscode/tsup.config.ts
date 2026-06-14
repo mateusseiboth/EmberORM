@@ -1,14 +1,22 @@
 import { defineConfig } from "tsup";
 
 export default defineConfig({
-  entry: { extension: "src/extension.ts" },
+  entry: {
+    extension: "src/extension.ts",
+    server: "src/server/server.ts",
+  },
   format: ["cjs"],
   outDir: "out",
   target: "node18",
-  // VSCode provides the `vscode` module at runtime; everything else is bundled
-  // so the extension ships as a single file with no install step.
+  // VSCode provides `vscode` at runtime; bundle everything else (ember-orm and
+  // the language-server libraries) so the extension ships self-contained.
   external: ["vscode"],
-  noExternal: ["ember-orm"],
+  noExternal: [
+    "ember-orm",
+    "vscode-languageclient",
+    "vscode-languageserver",
+    "vscode-languageserver-textdocument",
+  ],
   clean: true,
   sourcemap: true,
   dts: false,

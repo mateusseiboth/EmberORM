@@ -1,7 +1,7 @@
 {
   "name": "ember-orm-vscode",
   "displayName": "EmberORM",
-  "description": "Syntax highlighting, formatting, diagnostics and completion for EmberORM `.ember` schema files.",
+  "description": "Language server for EmberORM `.ember` schema files: highlighting, diagnostics, formatting (with relation auto-completion), go-to-definition, references, rename, symbols, code actions and completion.",
   "version": "0.1.0",
   "license": "MIT",
   "publisher": "ember-orm",
@@ -81,7 +81,10 @@
     "vscode:prepublish": "tsup"
   },
   "dependencies": {
-    "ember-orm": "file:../.."
+    "ember-orm": "file:../..",
+    "vscode-languageclient": "^9.0.1",
+    "vscode-languageserver": "^9.0.1",
+    "vscode-languageserver-textdocument": "^1.0.12"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

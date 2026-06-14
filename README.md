@@ -101,10 +101,11 @@ model Post {
 ## Editor support
 
 A VSCode extension lives in [`editors/vscode`](./editors/vscode) — a Prisma-like
-experience for `.ember` files: syntax highlighting, as-you-type diagnostics
-(via the real parser/validator), canonical formatting, completion (keywords,
-types, `@`/`@@` attributes, `@db.*` native types, default functions), hover, and
-commands for generate / db pull / validate.
+experience for `.ember` files, powered by a dedicated **language server**:
+syntax highlighting, as-you-type diagnostics, canonical formatting with relation
+auto-completion (and format-on-save), **go-to-definition, find references,
+rename, outline symbols, code actions**, and context-aware completion (keywords,
+types, model/enum names, `@`/`@@` attributes, `@db.*` native types, functions).
 
 ```bash
 cd editors/vscode && npm install && npm run build   # then press F5 in VSCode
