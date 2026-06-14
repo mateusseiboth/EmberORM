@@ -19,6 +19,7 @@ import type {
   CountArgs,
   CreateArgs,
   CreateManyArgs,
+  CreateManyAndReturnArgs,
   DeleteArgs,
   DeleteManyArgs,
   FindFirstArgs,
@@ -27,6 +28,7 @@ import type {
   GroupByArgs,
   IncludeInput,
   NestedReadArgs,
+  OmitInput,
   SelectInput,
   SortOrder,
   UpdateArgs,
@@ -50,6 +52,21 @@ import { WriteProcessor, type Executor } from "./writer";
 interface RelationRead {
   field: FieldNode;
   args: NestedReadArgs;
+}
+
+/** The projection-shaping options shared by read-back of writes. */
+interface ReadShape {
+  select?: SelectInput;
+  include?: IncludeInput;
+  omit?: OmitInput;
+}
+
+function readShape(args: {
+  select?: SelectInput;
+  include?: IncludeInput;
+  omit?: OmitInput;
+}): ReadShape {
+  return { select: args.select, include: args.include, omit: args.omit };
 }
 
 /**
@@ -164,7 +181,7 @@ export class QueryEngine {
     return this.run(async (tx) => {
       const writer = new WriteProcessor(this.schema, this.dialect, this.execOn(tx));
       const keys = await writer.create(model, args.data);
-      return this.readBack(model, keys, args.select, args.include, this.execOn(tx));
+      return this.readBack(model, keys, readShape(args), this.execOn(tx));
     });
   }
 
@@ -181,6 +198,25 @@ export class QueryEngine {
     });
   }
 
+  /** Like createMany, but returns the created records (no nested relations). */
+  createManyAndReturn(
+    name: string,
+    args: CreateManyAndReturnArgs,
+  ): Promise<Record<string, unknown>[]> {
+    const model = this.model(name);
+    return this.run(async (tx) => {
+      const exec = this.execOn(tx);
+      const writer = new WriteProcessor(this.schema, this.dialect, exec);
+      const out: Record<string, unknown>[] = [];
+      const shape: ReadShape = { select: args.select, omit: args.omit };
+      for (const data of args.data) {
+        const keys = await writer.create(model, data);
+        out.push(await this.readBack(model, keys, shape, exec));
+      }
+      return out;
+    });
+  }
+
   update(name: string, args: UpdateArgs): Promise<Record<string, unknown>> {
     const model = this.model(name);
     this.assertUniqueWhere(model, args.where);
@@ -190,7 +226,7 @@ export class QueryEngine {
       const keys = this.pickKeys(model, target);
       const writer = new WriteProcessor(this.schema, this.dialect, exec);
       await writer.updateRow(model, args.where, args.data, keys);
-      return this.readBack(model, keys, args.select, args.include, exec);
+      return this.readBack(model, keys, readShape(args), exec);
     });
   }
 
@@ -217,10 +253,10 @@ export class QueryEngine {
       if (existing) {
         const keys = this.pickKeys(model, existing);
         await writer.updateRow(model, args.where, args.update, keys);
-        return this.readBack(model, keys, args.select, args.include, exec);
+        return this.readBack(model, keys, readShape(args), exec);
       }
       const keys = await writer.create(model, args.create);
-      return this.readBack(model, keys, args.select, args.include, exec);
+      return this.readBack(model, keys, readShape(args), exec);
     });
   }
 
@@ -229,7 +265,7 @@ export class QueryEngine {
     this.assertUniqueWhere(model, args.where);
     return this.run(async (tx) => {
       const exec = this.execOn(tx);
-      const row = await this.readBackOne(model, args.where, args.select, args.include, exec);
+      const row = await this.readBackOne(model, args.where, readShape(args), exec);
       if (!row) throw new RecordNotFoundError(name);
       const stmt = compileDelete(model, args.where, newContext(this.schema, this.dialect));
       await exec(stmt.sql);
@@ -258,7 +294,11 @@ export class QueryEngine {
   ): Promise<Record<string, unknown>[]> {
     const relations = this.readRelations(model, args.select, args.include);
     const countFields = this.readCountRelations(model, args.select, args.include);
-    const selectedScalars = selectedScalarNames(model, args.select);
+    const selectedScalars = applyOmit(
+      model,
+      selectedScalarNames(model, args.select),
+      args.omit,
+    );
     const distinctFields = normalizeDistinct(model, args.distinct);
     // On Firebird 3+ `distinct` is pushed to SQL via ROW_NUMBER(); on 2.x it is
     // de-duplicated in memory (and pagination is therefore also done in memory).
@@ -477,12 +517,11 @@ export class QueryEngine {
   private async readBack(
     model: ModelNode,
     keys: Record<string, unknown>,
-    select: SelectInput | undefined,
-    include: IncludeInput | undefined,
+    shape: ReadShape,
     exec: Executor,
   ): Promise<Record<string, unknown>> {
     const where = keysToWhere(model, keys);
-    const row = await this.readBackOne(model, where, select, include, exec);
+    const row = await this.readBackOne(model, where, shape, exec);
     if (!row) throw new RecordNotFoundError(model.name);
     return row;
   }
@@ -490,11 +529,14 @@ export class QueryEngine {
   private async readBackOne(
     model: ModelNode,
     where: WhereInput,
-    select: SelectInput | undefined,
-    include: IncludeInput | undefined,
+    shape: ReadShape,
     exec: Executor,
   ): Promise<Record<string, unknown> | null> {
-    const rows = await this.readMany(model, { where, select, include, take: 1 }, exec);
+    const rows = await this.readMany(
+      model,
+      { where, select: shape.select, include: shape.include, omit: shape.omit, take: 1 },
+      exec,
+    );
     return rows[0] ?? null;
   }
 
@@ -565,6 +607,30 @@ function selectedScalarNames(
     if (field && field.kind !== "object") names.add(k);
   }
   return names;
+}
+
+/**
+ * Apply `omit` (the inverse of select). Only used when `select` is absent —
+ * with select, the selection already determines visible fields. Returns the set
+ * of scalar field names that remain visible.
+ */
+function applyOmit(
+  model: ModelNode,
+  selected: Set<string> | null,
+  omit: Record<string, boolean> | undefined,
+): Set<string> | null {
+  if (selected || !omit) return selected;
+  const omitted = new Set(
+    Object.entries(omit)
+      .filter(([, v]) => v)
+      .map(([k]) => k),
+  );
+  if (omitted.size === 0) return null;
+  return new Set(
+    scalarFields(model)
+      .map((f) => f.name)
+      .filter((n) => !omitted.has(n)),
+  );
 }
 
 function keysToWhere(

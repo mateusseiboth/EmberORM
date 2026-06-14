@@ -175,3 +175,70 @@ await db.$queryRawUnsafe("SELECT * FROM USERS WHERE ID = ?", id);
 ```
 
 Tagged-template values become `?` parameters automatically.
+
+## omit, createManyAndReturn, fluent API
+
+```ts
+// omit — inverse of select (return everything except the listed fields)
+await db.user.findMany({ omit: { passwordHash: true } });
+
+// createManyAndReturn — bulk insert that returns the rows
+const rows = await db.post.createManyAndReturn({ data: [ ... ] });
+
+// fluent API — traverse a relation from a unique/first read
+const posts = await db.user.findUnique({ where: { id } }).posts();
+const author = await db.post.findUnique({ where: { id } }).author();   // chainable
+```
+
+## groupBy having
+
+```ts
+db.post.groupBy({
+  by: ["authorId"],
+  _sum: { views: true },
+  having: {
+    authorId: { gt: 0 },          // condition on a group column
+    views: { _sum: { gt: 100 } }, // condition on SUM(views)
+  },
+});
+```
+
+## Client Extensions (`$extends`)
+
+`$extends` returns a new client (the original is unchanged) and accepts four
+categories — `result`, `model`, `query`, `client`:
+
+```ts
+const xdb = db.$extends({
+  result: {
+    user: {
+      fullName: {
+        needs: { firstName: true, lastName: true },
+        compute: (u) => `${u.firstName} ${u.lastName}`,
+      },
+    },
+  },
+  model: {
+    user: { findByEmail(email: string) { return this.findFirst({ where: { email } }); } },
+  },
+  query: {
+    user: {
+      findMany: ({ args, query }) => query({ ...args, where: { ...args.where, active: true } }),
+    },
+  },
+  client: { $health: () => "ok" },
+});
+```
+
+## Middleware & events
+
+```ts
+db.$use(async (params, next) => {
+  const start = Date.now();
+  const result = await next(params);
+  console.log(params.action, Date.now() - start);
+  return result;
+});
+
+db.$on("query", (e) => console.log(e.sql, e.durationMs));
+```

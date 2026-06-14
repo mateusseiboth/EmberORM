@@ -3,7 +3,6 @@ import {
   createDriver,
   parseConnectionUrl,
   type ConnectionConfig,
-  type DriverOptions,
   type QueryEvent,
   type QueryLogger,
   type SqlDriver,
@@ -14,9 +13,22 @@ import { FirebirdDialect, type SqlDialect } from "@ember/sql";
 import { QueryEngine } from "@ember/query";
 import { resolveDatasourceUrl } from "@ember/schema";
 import { lowerFirst } from "@ember/utils";
-import { createDelegate, type ModelDelegate } from "./delegate";
+import { type ModelDelegate } from "./delegate";
+import {
+  buildDelegate,
+  type DelegateContext,
+  type EmberExtensionArgs,
+  type Middleware,
+} from "./runtime";
 
 export type { ModelDelegate } from "./delegate";
+export type {
+  EmberExtensionArgs,
+  Middleware,
+  QueryHook,
+  QueryHookParams,
+  ResultFieldExtension,
+} from "./runtime";
 export type { QueryEvent, QueryLogger } from "@ember/driver";
 
 export interface ClientOptions {
@@ -44,6 +56,12 @@ export class EmberClientBase {
   protected readonly schema: SchemaDocument;
   private connected = false;
 
+  /** Mutated by $extends (per instance) and $use (shared). */
+  protected extensions: EmberExtensionArgs[] = [];
+  protected middlewares: Middleware[] = [];
+  private readonly queryListeners: QueryLogger[] = [];
+  private readonly baseLog?: QueryLogger;
+
   /** Dynamic model delegates, keyed by camelCased model name. */
   [delegate: string]: unknown;
 
@@ -61,22 +79,69 @@ export class EmberClientBase {
       options.datasource ?? parseConnectionUrl(url!);
 
     this.dialect = new FirebirdDialect({ version: config.version });
+    this.baseLog = buildLogger(options.log);
 
-    const driverOptions: DriverOptions = {};
-    const onQuery = buildLogger(options.log);
-    if (onQuery) driverOptions.onQuery = onQuery;
-
-    this.driver = createDriver(config, driverOptions);
+    this.driver = createDriver(config, { onQuery: (e) => this.dispatchQuery(e) });
     this.engine = new QueryEngine(options.schema, this.dialect, this.driver);
 
-    for (const model of options.schema.models) {
-      const key = lowerFirst(model.name);
-      Object.defineProperty(this, key, {
-        value: createDelegate(this.engine, model.name),
+    this.installDelegates();
+  }
+
+  private dispatchQuery(event: QueryEvent): void {
+    this.baseLog?.(event);
+    for (const listener of this.queryListeners) listener(event);
+  }
+
+  private delegateContext(): DelegateContext {
+    return {
+      engine: this.engine,
+      schema: this.schema,
+      extensions: this.extensions,
+      middlewares: this.middlewares,
+    };
+  }
+
+  /** (Re)define one delegate property per model using the current extensions. */
+  private installDelegates(): void {
+    const ctx = this.delegateContext();
+    for (const model of this.schema.models) {
+      Object.defineProperty(this, lowerFirst(model.name), {
+        value: buildDelegate(ctx, model.name),
         enumerable: true,
-        writable: false,
+        configurable: true,
       });
     }
+  }
+
+  /**
+   * Prisma-style Client Extensions. Returns a new client (the original is
+   * unchanged) that shares the connection/engine but applies the extension's
+   * `result` / `model` / `query` / `client` definitions.
+   */
+  $extends(extension: EmberExtensionArgs): this {
+    const clone: this = Object.create(this);
+    clone.extensions = [...this.extensions, extension];
+    clone.installDelegates();
+    if (extension.client) {
+      for (const [key, value] of Object.entries(extension.client)) {
+        Object.defineProperty(clone, key, {
+          value: typeof value === "function" ? value.bind(clone) : value,
+          enumerable: true,
+          configurable: true,
+        });
+      }
+    }
+    return clone;
+  }
+
+  /** Prisma-style middleware: runs around every operation. */
+  $use(middleware: Middleware): void {
+    this.middlewares.push(middleware);
+  }
+
+  /** Subscribe to query events (mirrors the `log` callback). */
+  $on(event: "query", listener: QueryLogger): void {
+    if (event === "query") this.queryListeners.push(listener);
   }
 
   /** Type-safe access to a delegate by model name. */

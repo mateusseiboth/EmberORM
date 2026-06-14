@@ -68,4 +68,18 @@ describe("client generator", () => {
     expect(src).toContain("export class EmberClient extends EmberClientBase");
     expect(src).toContain("declare readonly user: Prisma.UserDelegate;");
   });
+
+  it("emits fluent return types, createManyAndReturn and omit", () => {
+    // fluent type with relation traversal methods
+    expect(src).toContain("export type UserFluent<A, Null = null>");
+    expect(src).toContain("posts<S extends Prisma.PostFindManyArgs");
+    // find ops return the fluent type
+    expect(src).toMatch(/findUnique<A extends UserFindUniqueArgs>\(args: A\): UserFluent<A, null>/);
+    // createManyAndReturn delegate method + args
+    expect(src).toContain("createManyAndReturn<A extends UserCreateManyAndReturnArgs>");
+    expect(src).toContain("export type UserCreateManyAndReturnArgs");
+    // omit on read args
+    expect(src).toContain("export type UserOmit = Partial<Record<keyof User, boolean>>;");
+    expect(src).toMatch(/UserFindManyArgs = \{[\s\S]*omit\?: UserOmit;/);
+  });
 });

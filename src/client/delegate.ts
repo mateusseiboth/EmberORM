@@ -4,6 +4,7 @@ import type {
   CountArgs,
   CreateArgs,
   CreateManyArgs,
+  CreateManyAndReturnArgs,
   DeleteArgs,
   DeleteManyArgs,
   FindFirstArgs,
@@ -28,6 +29,9 @@ export interface ModelDelegate {
   findUniqueOrThrow(args: FindUniqueArgs): Promise<Record<string, unknown>>;
   create(args: CreateArgs): Promise<Record<string, unknown>>;
   createMany(args: CreateManyArgs): Promise<{ count: number }>;
+  createManyAndReturn(
+    args: CreateManyAndReturnArgs,
+  ): Promise<Record<string, unknown>[]>;
   update(args: UpdateArgs): Promise<Record<string, unknown>>;
   updateMany(args: UpdateManyArgs): Promise<{ count: number }>;
   upsert(args: UpsertArgs): Promise<Record<string, unknown>>;
@@ -51,6 +55,7 @@ export function createDelegate(
     findUniqueOrThrow: (args) => engine.findUniqueOrThrow(modelName, args),
     create: (args) => engine.create(modelName, args),
     createMany: (args) => engine.createMany(modelName, args),
+    createManyAndReturn: (args) => engine.createManyAndReturn(modelName, args),
     update: (args) => engine.update(modelName, args),
     updateMany: (args) => engine.updateMany(modelName, args),
     upsert: (args) => engine.upsert(modelName, args),

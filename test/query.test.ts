@@ -9,6 +9,7 @@ import {
   compileUpdate,
   compileDelete,
   compileAggregate,
+  compileGroupBy,
   newContext,
   compileWhere,
   resolveRelation,
@@ -153,6 +154,23 @@ describe("statement compiler", () => {
     const stmt = compileDelete(User, { id: 1 }, ctx());
     expect(stmt.sql.text).toBe('DELETE FROM "USERS" "t0" WHERE "t0"."ID" = ?');
     expect(stmt.sql.params).toEqual([1]);
+  });
+
+  it("compiles groupBy with HAVING on a group column and an aggregate", () => {
+    const { sql } = compileGroupBy(
+      User,
+      {
+        by: ["active"],
+        _avg: { age: true },
+        having: { active: { equals: true }, age: { _avg: { gt: 18 } } },
+      } as any,
+      ctx(),
+    );
+    expect(sql.text).toContain("GROUP BY");
+    expect(sql.text).toContain("HAVING");
+    expect(sql.text).toContain('"t0"."ACTIVE" = ?');
+    expect(sql.text).toContain('AVG("t0"."AGE") > ?');
+    expect(sql.params).toEqual([true, 18]);
   });
 
   it("compiles aggregate functions", () => {

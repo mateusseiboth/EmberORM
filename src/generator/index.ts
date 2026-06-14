@@ -80,7 +80,26 @@ export type ${node.name} = (typeof ${node.name})[keyof typeof ${node.name}];`;
     lines.push(`export type ${model.name} = {\n${scalars}\n};`);
     // Recursive payload resolver (handles nested select/include narrowing).
     lines.push(`export type ${model.name}GetPayload<A> = $Payload<"${model.name}", A>;`);
+    lines.push(this.fluentType(model));
     return lines.join("\n");
+  }
+
+  /**
+   * Fluent-API return type for single-record reads: a Promise of the payload
+   * that also exposes a method per relation (to-many -> array; to-one ->
+   * chainable fluent).
+   */
+  private fluentType(model: ModelNode): string {
+    const n = model.name;
+    const methods = relationFields(model).map((f) => {
+      if (f.isList) {
+        return `  ${f.name}<S extends Prisma.${f.type}FindManyArgs = {}>(args?: S): Promise<${f.type}GetPayload<S>[]>;`;
+      }
+      return `  ${f.name}<S extends Prisma.${f.type}FindFirstArgs = {}>(args?: S): ${f.type}Fluent<S, null>;`;
+    });
+    return `export type ${n}Fluent<A, Null = null> = Promise<${n}GetPayload<A> | Null> & {
+${methods.join("\n")}
+};`;
   }
 
   /**
@@ -293,11 +312,14 @@ ${[...updateScalars, ...updateRelations].join("\n")}
 
   private argsTypes(model: ModelNode): string {
     const n = model.name;
-    return `export type ${n}FindManyArgs = {
+    return `export type ${n}Omit = Partial<Record<keyof ${n}, boolean>>;
+
+export type ${n}FindManyArgs = {
   where?: ${n}WhereInput;
   orderBy?: ${n}OrderByInput | ${n}OrderByInput[];
   select?: ${n}Select;
   include?: ${n}Include;
+  omit?: ${n}Omit;
   take?: number;
   skip?: number;
   cursor?: ${n}WhereUniqueInput;
@@ -310,21 +332,31 @@ export type ${n}FindUniqueArgs = {
   where: ${n}WhereUniqueInput;
   select?: ${n}Select;
   include?: ${n}Include;
+  omit?: ${n}Omit;
 };
 
 export type ${n}CreateArgs = {
   data: ${n}CreateInput;
   select?: ${n}Select;
   include?: ${n}Include;
+  omit?: ${n}Omit;
 };
 
 export type ${n}CreateManyArgs = { data: ${n}CreateInput[]; skipDuplicates?: boolean };
+
+export type ${n}CreateManyAndReturnArgs = {
+  data: ${n}CreateInput[];
+  select?: ${n}Select;
+  omit?: ${n}Omit;
+  skipDuplicates?: boolean;
+};
 
 export type ${n}UpdateArgs = {
   where: ${n}WhereUniqueInput;
   data: ${n}UpdateInput;
   select?: ${n}Select;
   include?: ${n}Include;
+  omit?: ${n}Omit;
 };
 
 export type ${n}UpdateManyArgs = { where?: ${n}WhereInput; data: ${n}UpdateInput };
@@ -335,6 +367,7 @@ export type ${n}UpsertArgs = {
   update: ${n}UpdateInput;
   select?: ${n}Select;
   include?: ${n}Include;
+  omit?: ${n}Omit;
 };
 
 export type ${n}DeleteArgs = { where: ${n}WhereUniqueInput; select?: ${n}Select; include?: ${n}Include };
@@ -362,12 +395,13 @@ export type ${n}GroupByArgs = ${n}AggregateArgs & {
     const n = model.name;
     return `export interface ${n}Delegate {
   findMany<A extends ${n}FindManyArgs>(args?: A): Promise<${n}GetPayload<A>[]>;
-  findFirst<A extends ${n}FindFirstArgs>(args?: A): Promise<${n}GetPayload<A> | null>;
-  findFirstOrThrow<A extends ${n}FindFirstArgs>(args?: A): Promise<${n}GetPayload<A>>;
-  findUnique<A extends ${n}FindUniqueArgs>(args: A): Promise<${n}GetPayload<A> | null>;
-  findUniqueOrThrow<A extends ${n}FindUniqueArgs>(args: A): Promise<${n}GetPayload<A>>;
+  findFirst<A extends ${n}FindFirstArgs>(args?: A): ${n}Fluent<A, null>;
+  findFirstOrThrow<A extends ${n}FindFirstArgs>(args?: A): ${n}Fluent<A, never>;
+  findUnique<A extends ${n}FindUniqueArgs>(args: A): ${n}Fluent<A, null>;
+  findUniqueOrThrow<A extends ${n}FindUniqueArgs>(args: A): ${n}Fluent<A, never>;
   create<A extends ${n}CreateArgs>(args: A): Promise<${n}GetPayload<A>>;
   createMany(args: ${n}CreateManyArgs): Promise<{ count: number }>;
+  createManyAndReturn<A extends ${n}CreateManyAndReturnArgs>(args: A): Promise<${n}GetPayload<A>[]>;
   update<A extends ${n}UpdateArgs>(args: A): Promise<${n}GetPayload<A>>;
   updateMany(args: ${n}UpdateManyArgs): Promise<{ count: number }>;
   upsert<A extends ${n}UpsertArgs>(args: A): Promise<${n}GetPayload<A>>;

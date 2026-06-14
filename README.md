@@ -90,6 +90,9 @@ model Post {
 | Transactions      | interactive `$transaction(fn)` and sequential `$transaction([...])`       |
 | Raw               | `$queryRaw`, `$executeRaw`, `*Unsafe` variants                            |
 | Migrations        | `ember migrate dev / deploy / status`, `ember db push` (schema↔DB diff)   |
+| Extensions        | `$extends` (result/model/query/client), `$use` middleware, `$on` events    |
+| Fluent API        | relation traversal: `db.user.findUnique(...).posts()`                       |
+| More ops          | `omit`, `createManyAndReturn`, groupBy `having`                            |
 | Counts            | relation `_count` in `select`/`include`                                    |
 | Versions          | Firebird 2.1 / 2.5 / 3 / 4 / 5 (`?version=`), Srp & legacy auth            |
 | Logging           | `log: true` or a `QueryEvent` callback                                     |

@@ -76,6 +76,34 @@ async function main() {
     data: { views: { increment: 1 }, published: { set: true } },
   });
 
+  // omit fields from the result
+  const safe = await db.user.findMany({ omit: { email: true } });
+  void safe;
+
+  // createManyAndReturn
+  const made = await db.post.createManyAndReturn({
+    data: [{ title: "A", authorId: user.id }],
+  });
+  void made;
+
+  // fluent API: traverse a relation from a unique read
+  const authoredPosts = await db.user.findUnique({ where: { id: user.id } }).posts();
+  authoredPosts.forEach((p) => p.title);
+
+  // Client Extensions ($extends): add a computed result field
+  const xdb = db.$extends({
+    result: {
+      User: {
+        domain: {
+          needs: { email: true },
+          compute: (u) => String((u as { email: string }).email).split("@")[1],
+        },
+      },
+    },
+  });
+  const u2 = await xdb.user.findFirst();
+  void u2;
+
   // transaction (interactive): all ops share one transaction
   await db.$transaction(async (tx) => {
     await tx.user.update({ where: { id: user.id }, data: { name: "Ada L." } });

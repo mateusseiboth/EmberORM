@@ -134,6 +134,35 @@ describe("query engine reads", () => {
     expect(await engine.count("User", {})).toBe(7);
   });
 
+  it("omit excludes fields from the result", async () => {
+    const driver = new MockDriver([
+      [/FROM "USERS"/, () => [{ id: 1, email: "a@x.com", name: "A" }]],
+    ]);
+    const engine = new QueryEngine(doc, dialect, driver);
+    const rows = await engine.findMany("User", { omit: { name: true } });
+    expect(rows[0]).toEqual({ id: 1, email: "a@x.com" });
+    // the omitted column is not even projected
+    const call = driver.calls[0]!;
+    expect(call.sql).not.toContain('"NAME"');
+  });
+
+  it("createManyAndReturn inserts and reads each row back", async () => {
+    const driver = new MockDriver([
+      [/INSERT INTO "USERS"/, (p) => [{ id: p[0] === "a@x.com" ? 1 : 2 }]],
+      [
+        /FROM "USERS"/,
+        (p) => [{ id: p[0], email: p[0] === 1 ? "a@x.com" : "b@x.com", name: "N" }],
+      ],
+    ]);
+    const engine = new QueryEngine(doc, dialect, driver);
+    const rows = await engine.createManyAndReturn("User", {
+      data: [{ email: "a@x.com" }, { email: "b@x.com" }],
+    });
+    expect(rows).toHaveLength(2);
+    expect(rows[0]!.id).toBe(1);
+    expect(rows[1]!.id).toBe(2);
+  });
+
   it("cursor adds a >= filter and orders by the cursor field", async () => {
     const driver = new MockDriver([
       [/FROM "USERS"/, () => [{ id: 5, email: "e", name: "n" }]],

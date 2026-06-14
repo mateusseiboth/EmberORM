@@ -10,6 +10,7 @@ import { Sql, type SqlDialect } from "@ember/sql";
 import type { SqlValue } from "@ember/driver";
 import type { AggregateArgs, OrderByInput, SortOrder, WhereInput } from "./args";
 import { compileOrderBy } from "./order";
+import { compileHaving } from "./having";
 import { type CompileContext, compileWhere } from "./where";
 
 export interface SelectStatement {
@@ -188,6 +189,9 @@ export function compileGroupBy(
       .map((f) => d.quoteRef(ROOT_ALIAS, fieldColumn(f)))
       .join(", ")}`,
   );
+
+  const having = compileHaving(model, ROOT_ALIAS, args.having, ctx);
+  if (!having.isEmpty()) sql.push(" HAVING ").append(having);
 
   const order = compileOrderBy(model, ROOT_ALIAS, args.orderBy, d);
   if (!order.isEmpty()) sql.push(" ORDER BY ").append(order);

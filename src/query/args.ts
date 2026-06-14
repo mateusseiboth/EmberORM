@@ -51,6 +51,8 @@ export type OrderByInput =
 
 export type SelectInput = Record<string, boolean | NestedReadArgs>;
 export type IncludeInput = Record<string, boolean | NestedReadArgs>;
+/** Fields to exclude from the result (inverse of select). */
+export type OmitInput = Record<string, boolean>;
 
 export interface NestedReadArgs {
   select?: SelectInput;
@@ -67,6 +69,7 @@ export interface FindManyArgs {
   orderBy?: OrderByInput;
   select?: SelectInput;
   include?: IncludeInput;
+  omit?: OmitInput;
   take?: number;
   skip?: number;
   cursor?: Record<string, unknown>;
@@ -77,6 +80,7 @@ export interface FindUniqueArgs {
   where: WhereInput;
   select?: SelectInput;
   include?: IncludeInput;
+  omit?: OmitInput;
 }
 
 export interface FindFirstArgs extends FindManyArgs {}
@@ -85,10 +89,18 @@ export interface CreateArgs {
   data: Record<string, unknown>;
   select?: SelectInput;
   include?: IncludeInput;
+  omit?: OmitInput;
 }
 
 export interface CreateManyArgs {
   data: Record<string, unknown>[];
+  skipDuplicates?: boolean;
+}
+
+export interface CreateManyAndReturnArgs {
+  data: Record<string, unknown>[];
+  select?: SelectInput;
+  omit?: OmitInput;
   skipDuplicates?: boolean;
 }
 
@@ -97,6 +109,7 @@ export interface UpdateArgs {
   data: Record<string, unknown>;
   select?: SelectInput;
   include?: IncludeInput;
+  omit?: OmitInput;
 }
 
 export interface UpdateManyArgs {
@@ -110,12 +123,14 @@ export interface UpsertArgs {
   update: Record<string, unknown>;
   select?: SelectInput;
   include?: IncludeInput;
+  omit?: OmitInput;
 }
 
 export interface DeleteArgs {
   where: WhereInput;
   select?: SelectInput;
   include?: IncludeInput;
+  omit?: OmitInput;
 }
 
 export interface DeleteManyArgs {

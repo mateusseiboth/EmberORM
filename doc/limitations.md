@@ -27,6 +27,10 @@ Current, honest status of the implementation.
 
 ## Recently completed
 
+- **Client Extensions (`$extends`)** with `result`/`model`/`query`/`client`,
+  **`$use` middleware**, **`$on('query')` events**, the **fluent API** (relation
+  traversal from a unique/first read), **`omit`**, **`createManyAndReturn`**, and
+  **groupBy `having`** (group-column and aggregate conditions).
 - **JSON text filters**, **composite (multi-field) cursors** via lexicographic
   keyset expansion, and **`distinct` via `ROW_NUMBER()`** on Firebird 3+
   (in-memory fallback on 2.x).
