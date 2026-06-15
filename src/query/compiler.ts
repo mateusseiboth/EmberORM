@@ -310,12 +310,11 @@ function outerOrderBy(
 
 function appendReturning(sql: Sql, d: SqlDialect, returning: FieldNode[]): void {
   if (returning.length === 0) return;
+  // Firebird does not accept output aliases (AS) in RETURNING, so the row comes
+  // back keyed by column name. Consumers map those columns back to field names
+  // (see WriteProcessor.keyValues), keeping the result aligned with the schema.
   sql.push(" RETURNING ");
-  sql.push(
-    returning
-      .map((f) => `${d.quoteId(fieldColumn(f))} AS ${d.quoteId(f.name)}`)
-      .join(", "),
-  );
+  sql.push(returning.map((f) => d.quoteId(fieldColumn(f))).join(", "));
 }
 
 function aggregateSelections(

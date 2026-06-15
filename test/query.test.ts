@@ -124,7 +124,7 @@ describe("statement compiler", () => {
     ]);
     const stmt = compileInsert(User, row, ctx(), idFields(User));
     expect(stmt.sql.text).toBe(
-      'INSERT INTO "USERS" ("EMAIL", "AGE") VALUES (?, ?) RETURNING "ID" AS "id"',
+      'INSERT INTO "USERS" ("EMAIL", "AGE") VALUES (?, ?) RETURNING "ID"',
     );
     expect(stmt.sql.params).toEqual(["a@b.com", 21]);
   });

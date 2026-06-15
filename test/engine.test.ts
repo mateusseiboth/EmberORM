@@ -246,7 +246,7 @@ describe("query engine writes", () => {
 
     const insertCall = driver.calls.find((c) => /INSERT/.test(c.sql))!;
     // autoincrement id omitted, RETURNING present, values bound as params
-    expect(insertCall.sql).toContain('RETURNING "ID" AS "id"');
+    expect(insertCall.sql).toContain('RETURNING "ID"');
     expect(insertCall.params).toEqual(["new@x.com", "New"]);
     void inserted;
   });
