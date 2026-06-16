@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import {
   findSchemaPath,
@@ -16,6 +17,8 @@ import { FirebirdDialect } from "@ember/sql";
 import { Introspector } from "@ember/introspect";
 import { writeClient } from "@ember/generator";
 import { Migrator } from "@ember/migrate";
+import { EmberClientBase } from "@ember/client";
+import { startStudioServer } from "@ember/studio";
 import { readFileSync } from "node:fs";
 
 export interface CliContext {
@@ -200,6 +203,62 @@ export async function dbPush(
   });
 }
 
+/** `ember studio` — launch the local web GUI (EmberStudio). */
+export async function studio(
+  ctx: CliContext,
+  options: { schemaPath?: string; url?: string; port?: number; open?: boolean },
+): Promise<number> {
+  const path = requireSchema(ctx, options.schemaPath);
+  if (!path) return 1;
+  const { document } = loadSchema(path);
+
+  const url =
+    options.url ??
+    resolveDatasourceUrl(document, dirname(path)) ??
+    process.env.DATABASE_URL;
+  if (!url) {
+    ctx.error(
+      "No database URL. Set DATABASE_URL, pass --url, or add a datasource block.",
+    );
+    return 1;
+  }
+
+  const client = new EmberClientBase({ schema: document, datasourceUrl: url });
+  await client.$connect();
+
+  let server: Awaited<ReturnType<typeof startStudioServer>>;
+  try {
+    server = await startStudioServer({
+      client,
+      schema: document,
+      port: options.port,
+    });
+  } catch (err) {
+    await client.$disconnect();
+    const message = err instanceof Error ? err.message : String(err);
+    ctx.error(`Could not start EmberStudio: ${message}`);
+    return 1;
+  }
+
+  ctx.log(`EmberStudio running at ${server.url}`);
+  ctx.log("This is a local-only tool with no authentication. Press Ctrl+C to stop.");
+
+  if (options.open) openBrowser(server.url);
+
+  // Keep the process alive until interrupted, then clean up.
+  return await new Promise<number>((resolve) => {
+    const shutdown = () => {
+      void (async () => {
+        await server.close().catch(() => {});
+        await client.$disconnect().catch(() => {});
+        resolve(0);
+      })();
+    };
+    process.once("SIGINT", shutdown);
+    process.once("SIGTERM", shutdown);
+  });
+}
+
 // ---- helpers --------------------------------------------------------------
 
 /** Resolve schema + URL, open a driver, build a Migrator, and run `fn`. */
@@ -233,6 +292,22 @@ async function withMigrator(
     return await fn(migrator);
   } finally {
     await driver.disconnect();
+  }
+}
+
+/** Best-effort: open the default browser at `url`. Failures are ignored. */
+function openBrowser(url: string): void {
+  const cmd =
+    process.platform === "darwin"
+      ? "open"
+      : process.platform === "win32"
+        ? "cmd"
+        : "xdg-open";
+  const args = process.platform === "win32" ? ["/c", "start", "", url] : [url];
+  try {
+    spawn(cmd, args, { stdio: "ignore", detached: true }).unref();
+  } catch {
+    // No browser available (CI/headless) — the URL is already logged.
   }
 }
 

@@ -81,3 +81,12 @@ export {
   splitStatements,
   FirebirdDdl,
 } from "@ember/migrate";
+
+// Studio (local data-browser GUI)
+export {
+  startStudioServer,
+  buildStudioSchema,
+  type StudioServer,
+  type StudioServerOptions,
+  type StudioSchema,
+} from "@ember/studio";

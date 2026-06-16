@@ -35,6 +35,8 @@
       "@ember/introspect/*": ["src/introspect/*"],
       "@ember/migrate": ["src/migrate/index.ts"],
       "@ember/migrate/*": ["src/migrate/*"],
+      "@ember/studio": ["src/studio/index.ts"],
+      "@ember/studio/*": ["src/studio/*"],
       "@ember/generator": ["src/generator/index.ts"],
       "@ember/generator/*": ["src/generator/*"],
       "@ember/errors": ["src/errors/index.ts"],

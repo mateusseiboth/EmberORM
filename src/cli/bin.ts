@@ -13,6 +13,7 @@ import {
   migrateDeploy,
   migrateDev,
   migrateStatus,
+  studio,
   validate,
 } from "./commands";
 
@@ -30,11 +31,14 @@ Commands:
   migrate status       Show applied vs pending migrations
   format               Re-print the schema with canonical formatting
   validate             Parse and validate the schema
+  studio               Launch EmberStudio, the local data browser GUI
 
 Options:
   --schema <path>      Path to the schema file
   --url <url>          Firebird connection URL (overrides datasource/env)
   --name <name>        Migration name (migrate dev)
+  --port <n>           Port for EmberStudio (default 5757)
+  --no-open            Don't open the browser (studio)
   -h, --help           Show this help
   -v, --version        Show version
 `;
@@ -91,6 +95,8 @@ async function main(): Promise<number> {
   const schemaPath = typeof flags.schema === "string" ? flags.schema : undefined;
   const url = typeof flags.url === "string" ? flags.url : undefined;
   const name = typeof flags.name === "string" ? flags.name : undefined;
+  const port =
+    typeof flags.port === "string" ? Number.parseInt(flags.port, 10) : undefined;
   const [first, second] = command;
 
   switch (first) {
@@ -102,6 +108,13 @@ async function main(): Promise<number> {
       return format(ctx, schemaPath);
     case "generate":
       return generate(ctx, schemaPath);
+    case "studio":
+      return studio(ctx, {
+        schemaPath,
+        url,
+        port,
+        open: flags["no-open"] !== true,
+      });
     case "db":
       if (second === "pull") return dbPull(ctx, { schemaPath, url });
       if (second === "push") return dbPush(ctx, { schemaPath, url });

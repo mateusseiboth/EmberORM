@@ -22,6 +22,9 @@ npx ember db pull
 
 # 4. generate the typed client
 npx ember generate
+
+# 5. (optional) browse & edit your data in EmberStudio
+npx ember studio
 ```
 
 ```ts
@@ -96,7 +99,29 @@ model Post {
 | Counts            | relation `_count` in `select`/`include`                                    |
 | Versions          | Firebird 2.1 / 2.5 / 3 / 4 / 5 (`?version=`), Srp & legacy auth            |
 | Logging           | `log: true` or a `QueryEvent` callback                                     |
-| Tooling           | `ember init / db pull / generate / format / validate`                     |
+| Studio            | `ember studio` — local web GUI to browse & edit data (CRUD)               |
+| Tooling           | `ember init / db pull / generate / format / validate / studio`            |
+
+## EmberStudio
+
+A local web GUI to browse and edit your data — EmberORM's counterpart to Prisma
+Studio. It reads your schema, connects through the same query engine, and serves
+a spreadsheet-style UI.
+
+```bash
+npx ember studio              # http://127.0.0.1:5757
+npx ember studio --port 8080  # custom port
+npx ember studio --no-open    # don't open the browser
+```
+
+- **Browse** every model with filtering, column sorting, and pagination.
+- **Edit** cells inline, **add** records via a schema-driven form, and **delete**
+  rows — all through `findMany / create / update / delete`, so values are coerced
+  exactly like the generated client.
+- **Follow relations**: foreign-key cells link to the related model, pre-filtered.
+
+EmberStudio binds to loopback (`127.0.0.1`) and has **no authentication** — it is
+a local development tool. Don't expose it to untrusted networks.
 
 ## Editor support
 

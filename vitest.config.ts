@@ -18,6 +18,7 @@ export default defineConfig({
       "@ember/client": r("./src/client/index.ts"),
       "@ember/introspect": r("./src/introspect/index.ts"),
       "@ember/migrate": r("./src/migrate/index.ts"),
+      "@ember/studio": r("./src/studio/index.ts"),
       "@ember/generator": r("./src/generator/index.ts"),
       "@ember/errors": r("./src/errors/index.ts"),
       "@ember/utils": r("./src/utils/index.ts"),

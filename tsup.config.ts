@@ -5,6 +5,7 @@ export default defineConfig({
     index: "src/index.ts",
     "client/index": "src/client/index.ts",
     "cli/bin": "src/cli/bin.ts",
+    "studio/server": "src/studio/server.ts",
     editor: "src/editor.ts",
   },
   format: ["esm", "cjs"],
