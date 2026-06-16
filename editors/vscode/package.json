@@ -2,7 +2,7 @@
   "name": "ember-orm-vscode",
   "displayName": "EmberORM",
   "description": "Language server for EmberORM `.ember` schema files: highlighting, diagnostics, formatting (with relation auto-completion), go-to-definition, references, rename, symbols, code actions and completion.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "license": "MIT",
   "icon": "media/icon.png",
   "publisher": "MateusSeiboth",
