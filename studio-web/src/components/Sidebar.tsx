@@ -1,4 +1,5 @@
 import type { StudioModel, StudioView } from "../types";
+import logoUrl from "../assets/ember.png";
 
 interface Props {
   models: StudioModel[];
@@ -19,7 +20,7 @@ export function Sidebar({ models, counts, selected, view, onSelect, onView }: Pr
   return (
     <aside className="sidebar">
       <div className="brand">
-        <span className="brand-mark">◆</span> EmberStudio
+        <img className="brand-logo" src={logoUrl} alt="" /> EmberStudio
       </div>
       <nav>
         <div className="nav-group">Studio</div>

@@ -15,6 +15,8 @@ import type {
 
 export interface StudioField {
   name: string;
+  /** Database column name (@map). Defaults to `name`. Used for raw SQL. */
+  dbName: string;
   /** ScalarType name, enum name, or related model name. */
   type: string;
   kind: "scalar" | "enum" | "object";
@@ -31,6 +33,8 @@ export interface StudioField {
 
 export interface StudioModel {
   name: string;
+  /** Database table name (@@map). Defaults to `name`. Used for raw SQL. */
+  dbName: string;
   /** Field names forming the primary key. */
   primaryKey: string[];
   fields: StudioField[];
@@ -64,6 +68,7 @@ function toStudioModel(model: ModelNode): StudioModel {
       : model.fields.filter((f) => f.isId).map((f) => f.name);
   return {
     name: model.name,
+    dbName: model.dbName ?? model.name,
     primaryKey,
     fields: model.fields.map(toStudioField),
     documentation: model.documentation,
@@ -73,6 +78,7 @@ function toStudioModel(model: ModelNode): StudioModel {
 function toStudioField(field: FieldNode): StudioField {
   return {
     name: field.name,
+    dbName: field.dbName ?? field.name,
     type: field.type,
     kind: field.kind,
     isList: field.isList,

@@ -8,6 +8,7 @@ export interface RelationInfo {
 
 export interface StudioField {
   name: string;
+  dbName: string;
   type: string;
   kind: "scalar" | "enum" | "object";
   isList: boolean;
@@ -23,6 +24,7 @@ export interface StudioField {
 
 export interface StudioModel {
   name: string;
+  dbName: string;
   primaryKey: string[];
   fields: StudioField[];
   documentation?: string;

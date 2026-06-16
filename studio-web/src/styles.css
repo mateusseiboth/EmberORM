@@ -9,6 +9,8 @@
   --accent-2: #ffb088;
   --danger: #ef5350;
   --link: #6db3ff;
+  /* Render native form controls (select option lists, scrollbars) dark. */
+  color-scheme: dark;
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
@@ -43,14 +45,19 @@ body {
   overflow-y: auto;
 }
 .brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 16px;
   font-weight: 700;
   font-size: 15px;
   letter-spacing: 0.3px;
   border-bottom: 1px solid var(--border);
 }
-.brand-mark {
-  color: var(--accent);
+.brand-logo {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
 }
 .sidebar nav {
   padding: 8px;
@@ -458,12 +465,11 @@ table.grid {
 /* Visualizer (ERD) */
 .visualizer {
   flex: 1;
-  overflow: auto;
-  padding: 16px;
-  display: flex;
-  flex-wrap: wrap;
-  align-content: flex-start;
-  gap: 16px;
+  min-height: 0;
+  position: relative;
+}
+.visualizer .react-flow__attribution {
+  display: none;
 }
 .erd-card {
   width: 280px;
@@ -471,7 +477,36 @@ table.grid {
   border-radius: 8px;
   background: var(--panel);
   overflow: hidden;
-  align-self: flex-start;
+}
+.erd-handle {
+  width: 8px;
+  height: 8px;
+  background: var(--accent);
+  border: none;
+}
+.erd-fields td {
+  cursor: default;
+}
+.visualizer .react-flow__controls {
+  box-shadow: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.visualizer .react-flow__controls-button {
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--border);
+  fill: var(--text);
+}
+.visualizer .react-flow__controls-button:hover {
+  background: var(--panel);
+}
+.visualizer .react-flow__edge-text {
+  fill: var(--muted);
+  font-size: 10px;
+}
+.visualizer .react-flow__edge-textbg {
+  fill: var(--bg);
 }
 .erd-title {
   width: 100%;

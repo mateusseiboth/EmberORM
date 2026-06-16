@@ -4,6 +4,7 @@
   "description": "Language server for EmberORM `.ember` schema files: highlighting, diagnostics, formatting (with relation auto-completion), go-to-definition, references, rename, symbols, code actions and completion.",
   "version": "0.1.0",
   "license": "MIT",
+  "icon": "media/icon.png",
   "publisher": "MateusSeiboth",
   "repository": {
     "type": "git",
@@ -27,7 +28,11 @@
         "id": "ember",
         "aliases": ["Ember", "ember", "EmberORM"],
         "extensions": [".ember"],
-        "configuration": "./language-configuration.json"
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./media/icon.png",
+          "dark": "./media/icon.png"
+        }
       }
     ],
     "grammars": [
