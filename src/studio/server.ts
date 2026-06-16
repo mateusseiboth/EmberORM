@@ -16,6 +16,7 @@ import { existsSync } from "node:fs";
 import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { SchemaDocument } from "@ember/ast";
+import type { QueryEvent } from "@ember/driver";
 import {
   EmberError,
   QueryValidationError,
@@ -28,6 +29,7 @@ import {
   deserializeWhere,
   serializeRow,
   serializeRows,
+  serializeValue,
 } from "./serialize";
 import { buildStudioSchema, type StudioSchema } from "./schema-meta";
 
@@ -48,6 +50,17 @@ export interface StudioServer {
 
 const DEFAULT_PORT = 5757;
 const DEFAULT_HOST = "127.0.0.1";
+/** How many recent query events the Console tab keeps. */
+const QUERY_LOG_LIMIT = 200;
+
+/** A query event captured for the Console, with a wall-clock timestamp. */
+interface LoggedQuery {
+  sql: string;
+  params: unknown[];
+  durationMs: number;
+  rowCount: number;
+  at: number;
+}
 
 /**
  * Resolve the directory of built SPA assets (`<pkg>/dist/studio/web`).
@@ -94,8 +107,21 @@ export function startStudioServer(
   const webRoot = options.webRoot ?? defaultWebRoot();
   const studioSchema = buildStudioSchema(schema);
 
+  // Capture every statement the engine runs so the Console tab can show it.
+  const queryLog: LoggedQuery[] = [];
+  client.$on("query", (e: QueryEvent) => {
+    queryLog.push({
+      sql: e.sql,
+      params: [...e.params],
+      durationMs: e.durationMs,
+      rowCount: e.rowCount,
+      at: Date.now(),
+    });
+    if (queryLog.length > QUERY_LOG_LIMIT) queryLog.shift();
+  });
+
   const server = createServer((req, res) => {
-    handle(req, res, { client, schema, studioSchema, webRoot }).catch((err) => {
+    handle(req, res, { client, schema, studioSchema, webRoot, queryLog }).catch((err) => {
       sendError(res, err);
     });
   });
@@ -123,6 +149,7 @@ interface HandlerContext {
   schema: SchemaDocument;
   studioSchema: StudioSchema;
   webRoot: string;
+  queryLog: LoggedQuery[];
 }
 
 async function handle(
@@ -146,6 +173,18 @@ async function handleApi(
 ): Promise<void> {
   if (route === "schema") {
     sendJson(res, 200, ctx.studioSchema);
+    return;
+  }
+
+  if (route === "log") {
+    sendJson(res, 200, { queries: ctx.queryLog.map(serializeValue) });
+    return;
+  }
+
+  if (route === "query") {
+    const body = await readJsonBody(req);
+    const result = await runRawSql(ctx.client, String(body.sql ?? ""));
+    sendJson(res, 200, result);
     return;
   }
 
@@ -222,6 +261,29 @@ function readArgs(
   if (body.select) args.select = body.select;
   if (body.include) args.include = body.include;
   return args;
+}
+
+/**
+ * Run an arbitrary SQL statement from the SQL tab. Read statements
+ * (`SELECT`/`WITH`) return rows + column order; anything else is executed and
+ * reports the affected-row count. Trailing semicolons are trimmed because
+ * Firebird rejects them on single statements.
+ */
+async function runRawSql(
+  client: EmberClientBase,
+  sql: string,
+): Promise<{ rows?: Record<string, unknown>[]; columns?: string[]; rowCount?: number }> {
+  const statement = sql.trim().replace(/;\s*$/, "");
+  if (!statement) throw new QueryValidationError("SQL statement is empty.");
+
+  if (/^(select|with)\b/i.test(statement)) {
+    const rows = await client.$queryRawUnsafe(statement);
+    const columns = rows.length > 0 ? Object.keys(rows[0]!) : [];
+    return { rows: serializeRows(rows), columns };
+  }
+
+  const rowCount = await client.$executeRawUnsafe(statement);
+  return { rowCount };
 }
 
 // ---- static assets --------------------------------------------------------

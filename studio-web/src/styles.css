@@ -58,6 +58,19 @@ body {
   flex-direction: column;
   gap: 2px;
 }
+.nav-group {
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  padding: 12px 10px 4px;
+}
+.tool-icon {
+  display: inline-block;
+  width: 16px;
+  color: var(--accent);
+  font-weight: 700;
+}
 .model {
   display: flex;
   justify-content: space-between;
@@ -325,4 +338,174 @@ table.grid {
 }
 .fatal {
   color: var(--danger);
+}
+
+/* Filter bar — raw mode + operator select */
+.filter-bar.raw {
+  flex: 1;
+  align-items: flex-start;
+}
+.raw-where {
+  flex: 1;
+  min-width: 280px;
+  height: 34px;
+  resize: vertical;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 7px 8px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px;
+}
+
+/* Pager controls */
+.pager-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+.pager-control select {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 4px 6px;
+  font-size: 12px;
+}
+
+/* SQL view */
+.sql-view,
+.console-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.sql-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+.sql-editor {
+  flex: 0 0 auto;
+  max-height: 45%;
+  overflow: auto;
+  border-bottom: 1px solid var(--border);
+}
+.sql-editor .cm-editor {
+  font-size: 13px;
+}
+.sql-editor .cm-editor.cm-focused {
+  outline: none;
+}
+.sql-result {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+}
+.result-note {
+  padding: 16px;
+  color: var(--muted);
+}
+
+/* Console (query log) */
+.console-log {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.log-entry {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 10px 12px;
+}
+.log-meta {
+  display: flex;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 11px;
+  margin-bottom: 6px;
+}
+.log-stat {
+  font-variant-numeric: tabular-nums;
+}
+.log-sql {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px;
+  color: var(--text);
+}
+.log-params {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+/* Visualizer (ERD) */
+.visualizer {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 16px;
+}
+.erd-card {
+  width: 280px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  overflow: hidden;
+  align-self: flex-start;
+}
+.erd-title {
+  width: 100%;
+  text-align: left;
+  background: var(--panel-2);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  color: var(--text);
+  font-weight: 700;
+  padding: 8px 12px;
+}
+.erd-title:hover {
+  color: var(--accent);
+}
+.erd-fields {
+  width: 100%;
+  border-collapse: collapse;
+}
+.erd-fields td {
+  padding: 5px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.erd-fields tr:last-child td {
+  border-bottom: none;
+}
+.erd-rel {
+  background: rgba(255, 120, 73, 0.04);
+}
+.erd-field-type {
+  text-align: right;
+}
+.erd-pk {
+  margin-right: 4px;
+  font-size: 10px;
 }

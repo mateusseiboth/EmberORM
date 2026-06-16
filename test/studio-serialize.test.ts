@@ -95,10 +95,12 @@ describe("studio schema metadata", () => {
 });
 
 describe("studio server API", () => {
-  // Minimal fake standing in for EmberClientBase: only `.model()` is used.
+  // Minimal fake standing in for EmberClientBase: `.model()` for data routes and
+  // `.$on()` for the Console query log.
   function fakeClient(handlers: Record<string, unknown>): EmberClientBase {
     return {
       model: () => handlers,
+      $on: () => {},
     } as unknown as EmberClientBase;
   }
 

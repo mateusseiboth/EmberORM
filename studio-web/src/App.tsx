@@ -1,23 +1,31 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type UIEvent } from "react";
 import * as api from "./api";
-import type { Row, SortOrder, StudioModel, StudioSchema } from "./types";
+import type { Row, SortOrder, StudioModel, StudioSchema, StudioView } from "./types";
 import { parseInput } from "./values";
 import { Sidebar } from "./components/Sidebar";
 import { DataGrid } from "./components/DataGrid";
 import { FilterBar } from "./components/FilterBar";
 import { RowForm } from "./components/RowForm";
+import { SqlConsole } from "./components/SqlConsole";
+import { QueryLog } from "./components/QueryLog";
+import { Visualizer } from "./components/Visualizer";
 
-const PAGE_SIZE = 50;
+const PAGE_SIZES = [25, 50, 100, 250];
 
 export function App() {
   const [schema, setSchema] = useState<StudioSchema | null>(null);
   const [fatal, setFatal] = useState<string | null>(null);
+  const [view, setView] = useState<StudioView>("data");
   const [selected, setSelected] = useState<string | null>(null);
   const [counts, setCounts] = useState<Record<string, number | undefined>>({});
 
   const [rows, setRows] = useState<Row[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(50);
+  const [infinite, setInfinite] = useState(false);
+  // In infinite mode this is the rolling row window (skip is always 0).
+  const [limit, setLimit] = useState(50);
   const [sort, setSort] = useState<{ field: string; order: SortOrder } | null>(null);
   const [where, setWhere] = useState<Record<string, unknown> | undefined>();
   const [loading, setLoading] = useState(false);
@@ -54,7 +62,9 @@ export function App() {
     if (!model) return;
     setLoading(true);
     try {
-      const args: api.FindManyArgs = { skip: page * PAGE_SIZE, take: PAGE_SIZE };
+      const args: api.FindManyArgs = infinite
+        ? { skip: 0, take: limit }
+        : { skip: page * pageSize, take: pageSize };
       if (where) args.where = where;
       if (sort) args.orderBy = { [sort.field]: sort.order };
       const [list, c] = await Promise.all([
@@ -69,27 +79,48 @@ export function App() {
     } finally {
       setLoading(false);
     }
-  }, [model, page, sort, where]);
+  }, [model, page, pageSize, infinite, limit, sort, where]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (view === "data") void load();
+  }, [load, view]);
+
+  function resetWindow() {
+    setPage(0);
+    setLimit(pageSize);
+  }
 
   function selectModel(name: string) {
+    setView("data");
     setSelected(name);
-    setPage(0);
     setSort(null);
     setWhere(undefined);
     setRows([]);
+    resetWindow();
+  }
+
+  function changePageSize(size: number) {
+    setPageSize(size);
+    setPage(0);
+    setLimit(size);
   }
 
   function toggleSort(field: string) {
-    setPage(0);
+    resetWindow();
     setSort((s) =>
       s?.field === field
         ? { field, order: s.order === "asc" ? "desc" : "asc" }
         : { field, order: "asc" },
     );
+  }
+
+  /** Grow the infinite window when the grid is scrolled near its bottom. */
+  function onGridScroll(e: UIEvent<HTMLDivElement>) {
+    if (!infinite || loading || rows.length >= total) return;
+    const el = e.currentTarget;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 200) {
+      setLimit((l) => l + pageSize);
+    }
   }
 
   /** Build a primary-key `where` from a row. */
@@ -118,16 +149,17 @@ export function App() {
   function followRelation(target: string, lookup: Record<string, unknown>) {
     const eq: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(lookup)) eq[k] = { equals: v };
+    setView("data");
     setSelected(target);
-    setPage(0);
     setSort(null);
     setWhere(eq);
+    resetWindow();
   }
 
   if (fatal) return <div className="fatal">Error: {fatal}</div>;
   if (!schema) return <div className="loading">Loading schema…</div>;
 
-  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const pages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
     <div className="app">
@@ -135,66 +167,110 @@ export function App() {
         models={schema.models}
         counts={counts}
         selected={selected}
+        view={view}
         onSelect={selectModel}
+        onView={setView}
       />
       <main className="content">
-        {model ? (
-          <>
-            <header className="toolbar">
-              <h1>{model.name}</h1>
-              <FilterBar
-                model={model}
-                onApply={(w) => {
-                  setPage(0);
-                  setWhere(w);
-                }}
-              />
-              <div className="spacer" />
-              <button className="primary" onClick={() => setCreating(true)}>
-                + Add record
-              </button>
-            </header>
-            <DataGrid
-              model={model}
-              rows={rows}
-              sort={sort}
-              onSort={toggleSort}
-              onEdit={editCell}
-              onDelete={deleteRow}
-              onFollowRelation={followRelation}
-            />
-            <footer className="pager">
-              <span>
-                {total} row{total === 1 ? "" : "s"}
-                {where ? " (filtered)" : ""}
-                {loading ? " · loading…" : ""}
-              </span>
-              <div className="spacer" />
-              <button disabled={page <= 0} onClick={() => setPage((p) => p - 1)}>
-                ‹ Prev
-              </button>
-              <span>
-                {page + 1} / {pages}
-              </span>
-              <button disabled={page + 1 >= pages} onClick={() => setPage((p) => p + 1)}>
-                Next ›
-              </button>
-            </footer>
-            {creating && (
-              <RowForm
-                model={model}
-                schema={schema}
-                onClose={() => setCreating(false)}
-                onSubmit={async (data) => {
-                  await api.createRow(model.name, data);
-                  await load();
-                }}
-              />
-            )}
-          </>
-        ) : (
-          <div className="loading">Select a model.</div>
+        {view === "visualizer" && (
+          <Visualizer schema={schema} onOpenModel={selectModel} />
         )}
+        {view === "console" && <QueryLog />}
+        {view === "sql" && <SqlConsole models={schema.models} />}
+        {view === "data" &&
+          (model ? (
+            <>
+              <header className="toolbar">
+                <h1>{model.name}</h1>
+                <FilterBar
+                  model={model}
+                  onApply={(w) => {
+                    resetWindow();
+                    setWhere(w);
+                  }}
+                />
+                <div className="spacer" />
+                <button className="primary" onClick={() => setCreating(true)}>
+                  + Add record
+                </button>
+              </header>
+              <DataGrid
+                model={model}
+                rows={rows}
+                sort={sort}
+                onScroll={onGridScroll}
+                onSort={toggleSort}
+                onEdit={editCell}
+                onDelete={deleteRow}
+                onFollowRelation={followRelation}
+              />
+              <footer className="pager">
+                <span>
+                  {total} row{total === 1 ? "" : "s"}
+                  {where ? " (filtered)" : ""}
+                  {loading ? " · loading…" : ""}
+                </span>
+                <div className="spacer" />
+                <label className="pager-control">
+                  rows
+                  <select
+                    value={pageSize}
+                    onChange={(e) => changePageSize(Number(e.target.value))}
+                  >
+                    {PAGE_SIZES.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="pager-control">
+                  <input
+                    type="checkbox"
+                    checked={infinite}
+                    onChange={(e) => {
+                      setInfinite(e.target.checked);
+                      resetWindow();
+                    }}
+                  />
+                  infinite scroll
+                </label>
+                {infinite ? (
+                  <span>
+                    {rows.length} / {total}
+                  </span>
+                ) : (
+                  <>
+                    <button disabled={page <= 0} onClick={() => setPage((p) => p - 1)}>
+                      ‹ Prev
+                    </button>
+                    <span>
+                      {page + 1} / {pages}
+                    </span>
+                    <button
+                      disabled={page + 1 >= pages}
+                      onClick={() => setPage((p) => p + 1)}
+                    >
+                      Next ›
+                    </button>
+                  </>
+                )}
+              </footer>
+              {creating && (
+                <RowForm
+                  model={model}
+                  schema={schema}
+                  onClose={() => setCreating(false)}
+                  onSubmit={async (data) => {
+                    await api.createRow(model.name, data);
+                    await load();
+                  }}
+                />
+              )}
+            </>
+          ) : (
+            <div className="loading">Select a model.</div>
+          ))}
       </main>
     </div>
   );

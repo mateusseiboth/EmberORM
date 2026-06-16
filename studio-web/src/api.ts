@@ -1,4 +1,4 @@
-import type { Row, SortOrder, StudioSchema } from "./types";
+import type { LoggedQuery, QueryResult, Row, SortOrder, StudioSchema } from "./types";
 
 async function post<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`/api/${path}`, {
@@ -52,4 +52,14 @@ export function deleteRow(
   where: Record<string, unknown>,
 ): Promise<{ row: Row }> {
   return post(`${model}/delete`, { where });
+}
+
+export function runQuery(sql: string): Promise<QueryResult> {
+  return post("query", { sql });
+}
+
+export async function getLog(): Promise<{ queries: LoggedQuery[] }> {
+  const res = await fetch("/api/log");
+  if (!res.ok) throw new Error(`Failed to load query log (${res.status})`);
+  return (await res.json()) as { queries: LoggedQuery[] };
 }

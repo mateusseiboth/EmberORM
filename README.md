@@ -114,11 +114,21 @@ npx ember studio --port 8080  # custom port
 npx ember studio --no-open    # don't open the browser
 ```
 
-- **Browse** every model with filtering, column sorting, and pagination.
+- **Browse** every model with filtering, column sorting, and pagination — choose
+  the page size or switch to infinite scroll.
+- **Filter** by field + operator, or drop into **raw mode** to pass a JSON
+  `WhereInput` (with `AND`/`OR`/`NOT`) straight to the engine.
 - **Edit** cells inline, **add** records via a schema-driven form, and **delete**
   rows — all through `findMany / create / update / delete`, so values are coerced
   exactly like the generated client.
 - **Follow relations**: foreign-key cells link to the related model, pre-filtered.
+- **Visualizer**: an ERD-style overview of every model, its fields, primary keys,
+  and relations.
+- **SQL** tab: write statements by hand with syntax highlighting and schema-aware
+  autocompletion (`Ctrl+Space`); `Ctrl/⌘+Enter` runs them via `$queryRawUnsafe` /
+  `$executeRawUnsafe` and shows the result grid.
+- **Console**: a live, read-only log of every statement the engine executes, with
+  SQL, params, duration, and row count.
 
 EmberStudio binds to loopback (`127.0.0.1`) and has **no authentication** — it is
 a local development tool. Don't expose it to untrusted networks.

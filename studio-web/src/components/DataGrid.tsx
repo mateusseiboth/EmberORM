@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type UIEvent } from "react";
 import type { Row, SortOrder, StudioModel } from "../types";
 import { displayValue, editValue } from "../values";
 
@@ -10,6 +10,7 @@ interface Props {
   onEdit: (row: Row, field: string, raw: string) => Promise<void>;
   onDelete: (row: Row) => Promise<void>;
   onFollowRelation: (targetModel: string, where: Record<string, unknown>) => void;
+  onScroll?: (e: UIEvent<HTMLDivElement>) => void;
 }
 
 export function DataGrid({
@@ -20,6 +21,7 @@ export function DataGrid({
   onEdit,
   onDelete,
   onFollowRelation,
+  onScroll,
 }: Props) {
   const [editing, setEditing] = useState<{ rowIdx: number; field: string } | null>(null);
   const [draft, setDraft] = useState("");
@@ -41,7 +43,7 @@ export function DataGrid({
   }
 
   return (
-    <div className="grid-wrap">
+    <div className="grid-wrap" onScroll={onScroll}>
       {error && <div className="banner error">{error}</div>}
       <table className="grid">
         <thead>

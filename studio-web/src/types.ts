@@ -45,3 +45,22 @@ export interface BytesToken {
   $type: "bytes";
   base64: string;
 }
+
+/** One statement executed by the engine, shown in the Console tab. */
+export interface LoggedQuery {
+  sql: string;
+  params: unknown[];
+  durationMs: number;
+  rowCount: number;
+  at: number;
+}
+
+/** Result of running a statement from the SQL tab. */
+export interface QueryResult {
+  rows?: Row[];
+  columns?: string[];
+  rowCount?: number;
+}
+
+/** Top-level studio surfaces. Model tables drive the "data" view. */
+export type StudioView = "data" | "visualizer" | "console" | "sql";
