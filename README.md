@@ -135,12 +135,22 @@ a local development tool. Don't expose it to untrusted networks.
 
 ## Editor support
 
-A VSCode extension lives in [`editors/vscode`](./editors/vscode) — a Prisma-like
-experience for `.ember` files, powered by a dedicated **language server**:
-syntax highlighting, as-you-type diagnostics, canonical formatting with relation
-auto-completion (and format-on-save), **go-to-definition, find references,
-rename, outline symbols, code actions**, and context-aware completion (keywords,
-types, model/enum names, `@`/`@@` attributes, `@db.*` native types, functions).
+The [**EmberORM** VSCode extension](https://marketplace.visualstudio.com/items?itemName=MateusSeiboth.ember-orm-vscode)
+gives `.ember` files a Prisma-like experience, powered by a dedicated **language
+server**: syntax highlighting, as-you-type diagnostics, canonical formatting with
+relation auto-completion (and format-on-save), **go-to-definition, find
+references, rename, outline symbols, code actions**, and context-aware completion
+(keywords, types, model/enum names, `@`/`@@` attributes, `@db.*` native types,
+functions).
+
+Install from the [Marketplace](https://marketplace.visualstudio.com/items?itemName=MateusSeiboth.ember-orm-vscode),
+or from the Quick Open panel (`Ctrl/⌘+P`):
+
+```text
+ext install MateusSeiboth.ember-orm-vscode
+```
+
+To build it from source instead (it lives in [`editors/vscode`](./editors/vscode)):
 
 ```bash
 cd editors/vscode && npm install && npm run build   # then press F5 in VSCode
