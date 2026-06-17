@@ -11,10 +11,24 @@ ember migrate dev --name add_posts   # diff, write a migration file, apply it
 ember migrate deploy                 # apply all pending migration files
 ember migrate status                 # list applied vs pending migrations
 ember db push                        # apply the diff directly (no file)
+ember migrate dev --log              # also print each SQL statement as it runs
 ```
 
 All commands resolve the connection from `--url`, the schema's `datasource`, or
 `DATABASE_URL`.
+
+Pass `--log` to `migrate dev`, `migrate deploy`, or `db push` to echo every
+generated statement (prefixed with `-- step n/total`) right before it executes —
+useful for debugging a DDL error. When a step fails, the error always names the
+offending statement and step number, regardless of `--log`.
+
+### Server version detection
+
+The DDL dialect must match the engine (e.g. `BOOLEAN` vs `SMALLINT`, `IDENTITY`
+vs generator+trigger, `ALTER COLUMN ... SET NOT NULL` vs a catalog update on
+2.1/2.5). When the connection URL omits `?version=`, the migrator now queries the
+live server (`ENGINE_VERSION`) and picks the matching dialect automatically. An
+explicit `?version=` in the URL always wins.
 
 ## How it works
 
