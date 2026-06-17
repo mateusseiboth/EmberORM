@@ -50,6 +50,16 @@ current (db pull) ─┘
 The history table `_EMBER_MIGRATIONS` (`ID`, `CHECKSUM`, `STEPS`, `APPLIED_AT`)
 is created automatically and always excluded from the diff.
 
+> **Firebird gotcha — DDL and DML must not share a transaction.** Firebird does
+> not expose uncommitted DDL to DML in the same transaction: a table `CREATE`d
+> inside a transaction is reported as `Table unknown` (SQL error -204) to any
+> `INSERT`/`SELECT` issued before that transaction commits. Because of this the
+> history table is created in its own committed transaction (`Migrator.ensureHistory`)
+> *before* the migration DDL is applied and the row is inserted into
+> `_EMBER_MIGRATIONS`. On a freshly zeroed database, running the CREATE and the
+> bookkeeping INSERT/SELECT in one transaction fails with
+> `Table unknown, _EMBER_MIGRATIONS`.
+
 ## What the diff covers
 
 | Change                                   | Supported |

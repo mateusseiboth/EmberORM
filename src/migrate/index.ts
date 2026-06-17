@@ -93,6 +93,15 @@ export class Migrator {
     }
   }
 
+  /**
+   * Create the history table in its own committed transaction. Firebird does
+   * not expose uncommitted DDL to DML in the same transaction, so the table
+   * must be committed before any later INSERT/SELECT can reference it.
+   */
+  private async ensureHistory(): Promise<void> {
+    await this.driver.transaction((tx) => ensureHistoryTable(tx, this.dialect));
+  }
+
   /** Compute the diff between the desired schema and the live database. */
   async diff(): Promise<SchemaDiff> {
     const current = await this.currentSchema();
@@ -119,8 +128,8 @@ export class Migrator {
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, "migration.sql"), body, "utf8");
 
+    await this.ensureHistory();
     await this.driver.transaction(async (tx) => {
-      await ensureHistoryTable(tx, this.dialect);
       await this.apply(tx, statements);
       await recordMigration(tx, this.dialect, {
         id,
@@ -150,10 +159,11 @@ export class Migrator {
     const local = listLocalMigrations(this.migrationsDir);
     const applied: { id: string; steps: number }[] = [];
 
-    const known = await this.driver.transaction(async (tx) => {
-      await ensureHistoryTable(tx, this.dialect);
-      return new Set((await appliedMigrations(tx, this.dialect)).map((m) => m.id));
-    });
+    await this.ensureHistory();
+    const known = await this.driver.transaction(
+      async (tx) =>
+        new Set((await appliedMigrations(tx, this.dialect)).map((m) => m.id)),
+    );
 
     for (const migration of local) {
       if (known.has(migration.id)) continue;
@@ -174,10 +184,10 @@ export class Migrator {
   /** `migrate status`: list applied vs pending migrations. */
   async status(): Promise<StatusResult> {
     const local = listLocalMigrations(this.migrationsDir).map((m) => m.id);
-    const applied = await this.driver.transaction(async (tx) => {
-      await ensureHistoryTable(tx, this.dialect);
-      return (await appliedMigrations(tx, this.dialect)).map((m) => m.id);
-    });
+    await this.ensureHistory();
+    const applied = await this.driver.transaction(async (tx) =>
+      (await appliedMigrations(tx, this.dialect)).map((m) => m.id),
+    );
     const appliedSet = new Set(applied);
     return {
       applied,

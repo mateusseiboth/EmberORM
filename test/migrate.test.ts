@@ -256,6 +256,54 @@ describe("Migrator", () => {
     );
   });
 
+  it("dev creates the history table in a committed transaction before inserting", async () => {
+    // Firebird does not expose uncommitted DDL to DML in the same transaction:
+    // a table CREATEd in a transaction is "unknown" to any INSERT/SELECT until
+    // that transaction commits. This driver models that rule so the test fails
+    // if the history CREATE and its INSERT ever share one transaction again.
+    const dir = mkdtempSync(join(tmpdir(), "ember-mig-"));
+
+    class FirebirdLikeDriver implements SqlDriver {
+      private committed = new Set<string>();
+      async connect() {}
+      async disconnect() {}
+      async transaction<T>(
+        fn: (tx: TransactionContext) => Promise<T>,
+      ): Promise<T> {
+        const pending = new Set<string>();
+        const tableOf = (re: RegExp, sql: string) =>
+          sql.match(re)?.[1];
+        const tx: TransactionContext = {
+          query: async (sql) => {
+            if (/COUNT\(\*\) AS N/.test(sql))
+              return [{ N: this.committed.has("_EMBER_MIGRATIONS") ? 1 : 0 }] as any;
+            if (/RDB\$RELATION/.test(sql)) return [] as any;
+            const created = tableOf(/CREATE TABLE "([^"]+)"/, sql);
+            if (created) {
+              pending.add(created);
+              return [] as any;
+            }
+            const touched =
+              tableOf(/INSERT INTO "([^"]+)"/, sql) ??
+              tableOf(/FROM "([^"]+)"/, sql);
+            if (touched && !this.committed.has(touched))
+              throw new Error(
+                `Dynamic SQL Error, SQL error code = -204, Table unknown, ${touched}`,
+              );
+            return [] as any;
+          },
+        };
+        const result = await fn(tx);
+        for (const t of pending) this.committed.add(t); // commit
+        return result;
+      }
+    }
+
+    const migrator = new Migrator(new FirebirdLikeDriver(), DESIRED, dir, dialect);
+    const result = await migrator.dev("init");
+    expect(result.empty).toBe(false);
+  });
+
   it("dev reports an empty diff when schema matches the database", async () => {
     // introspection returns the same shape -> plan() must be empty.
     const dir = mkdtempSync(join(tmpdir(), "ember-mig-"));
