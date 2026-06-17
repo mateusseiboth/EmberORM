@@ -34,6 +34,9 @@ export class ClientGenerator {
     parts.push(PAYLOAD_RESOLVER);
     parts.push(this.namespace());
     parts.push(this.clientClass());
+    // Brand alias: lets consumers write `Ember.TransactionClient` (etc.) while
+    // keeping the Prisma namespace for drop-in compatibility.
+    parts.push(`export import Ember = Prisma;`);
     return parts.filter(Boolean).join("\n\n") + "\n";
   }
 
@@ -148,8 +151,45 @@ ${relationEntries}
 
   // ---- input types (Prisma namespace) -------------------------------------
 
+  /**
+   * Transaction types, 1:1 with Prisma. `TransactionClient` is the client shape
+   * passed to interactive `$transaction` callbacks: every model delegate plus
+   * the raw-query helpers, but none of the connection/lifecycle methods you
+   * cannot call inside a transaction. It is built by enumerating delegates
+   * (rather than `Omit<EmberClient, ...>`) because the base client's
+   * `[delegate: string]: unknown` index signature would otherwise collapse the
+   * delegate properties to `unknown`. Usable as `Ember.TransactionClient` /
+   * `Prisma.TransactionClient`.
+   */
+  private transactionTypes(): string {
+    const delegates = this.schema.models
+      .map((m) => `  readonly ${lowerFirst(m.name)}: ${m.name}Delegate;`)
+      .join("\n");
+    return `export const TransactionIsolationLevel = {
+  ReadUncommitted: "ReadUncommitted",
+  ReadCommitted: "ReadCommitted",
+  RepeatableRead: "RepeatableRead",
+  Serializable: "Serializable",
+} as const;
+export type TransactionIsolationLevel =
+  (typeof TransactionIsolationLevel)[keyof typeof TransactionIsolationLevel];
+
+export type TransactionOptions = {
+  maxWait?: number;
+  timeout?: number;
+  isolationLevel?: TransactionIsolationLevel;
+};
+
+export type TransactionClient = {
+${delegates}
+} & Pick<
+  EmberClient,
+  "$queryRaw" | "$queryRawUnsafe" | "$executeRaw" | "$executeRawUnsafe"
+>;`;
+  }
+
   private namespace(): string {
-    const blocks: string[] = [SHARED_FILTERS];
+    const blocks: string[] = [SHARED_FILTERS, this.transactionTypes()];
     for (const model of this.schema.models) {
       blocks.push(this.whereInput(model));
       blocks.push(this.orderByInput(model));

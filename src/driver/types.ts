@@ -52,11 +52,12 @@ export interface TransactionContext {
   ): Promise<T[]>;
 }
 
+/** 1:1 with Prisma's `Prisma.TransactionIsolationLevel`. */
 export type IsolationLevel =
-  | "READ_COMMITTED"
-  | "READ_COMMITTED_READ_ONLY"
-  | "REPEATABLE_READ"
-  | "SERIALIZABLE";
+  | "ReadUncommitted"
+  | "ReadCommitted"
+  | "RepeatableRead"
+  | "Serializable";
 
 /** Emitted once per executed statement when a logger is configured. */
 export interface QueryEvent {
@@ -74,8 +75,14 @@ export interface DriverOptions {
   onQuery?: QueryLogger;
 }
 
+/**
+ * 1:1 with Prisma's interactive-transaction options. `maxWait`/`timeout` are
+ * accepted for drop-in compatibility; Firebird honors `isolationLevel`.
+ */
 export interface TransactionOptions {
-  isolation?: IsolationLevel;
+  maxWait?: number;
+  timeout?: number;
+  isolationLevel?: IsolationLevel;
 }
 
 /**

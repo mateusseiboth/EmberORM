@@ -36,18 +36,16 @@ const fb = Firebird as unknown as {
   ISOLATION_SERIALIZABLE: unknown;
 };
 
+// Firebird has no dirty reads, so ReadUncommitted maps to ReadCommitted.
+const ISOLATION_BY_LEVEL: Record<IsolationLevel, keyof typeof fb> = {
+  ReadUncommitted: "ISOLATION_READ_COMMITTED",
+  ReadCommitted: "ISOLATION_READ_COMMITTED",
+  RepeatableRead: "ISOLATION_REPEATABLE_READ",
+  Serializable: "ISOLATION_SERIALIZABLE",
+};
+
 function isolationConstant(level: IsolationLevel | undefined): unknown {
-  switch (level) {
-    case "READ_COMMITTED_READ_ONLY":
-      return fb.ISOLATION_READ_COMMITTED_READ_ONLY;
-    case "REPEATABLE_READ":
-      return fb.ISOLATION_REPEATABLE_READ;
-    case "SERIALIZABLE":
-      return fb.ISOLATION_SERIALIZABLE;
-    case "READ_COMMITTED":
-    default:
-      return fb.ISOLATION_READ_COMMITTED;
-  }
+  return fb[ISOLATION_BY_LEVEL[level ?? "ReadCommitted"]];
 }
 
 /**
@@ -109,7 +107,7 @@ export class FirebirdDriver implements SqlDriver {
     }
     await this.connect();
     const db = await this.acquire();
-    const tr = await this.begin(db, options?.isolation);
+    const tr = await this.begin(db, options?.isolationLevel);
     const ctx: TransactionContext = {
       query: (sql, params) => this.runOnTransaction(tr, sql, params),
     };

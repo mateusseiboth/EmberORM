@@ -132,12 +132,15 @@ paginate per group), see `engine.loadRelation`.
 
 Every operation runs inside a transaction (project rule + node-firebird's model).
 `FirebirdDriver.transaction` acquires a pooled connection, starts a transaction
-at `READ_COMMITTED` (configurable), commits on success and rolls back on any
+at `ReadCommitted` (configurable), commits on success and rolls back on any
 thrown error. Nested `transaction()` calls reuse the active one via
 `AsyncLocalStorage`, so `client.$transaction(fn)` composes: any delegate call
 inside `fn` joins the same transaction automatically.
 
-Introspection uses `READ_COMMITTED_READ_ONLY`.
+Transaction options are 1:1 with Prisma: `$transaction(fn, { maxWait, timeout,
+isolationLevel })`. `isolationLevel` uses Prisma's `TransactionIsolationLevel`
+values (`ReadUncommitted` | `ReadCommitted` | `RepeatableRead` | `Serializable`);
+since Firebird has no dirty reads, `ReadUncommitted` maps to `ReadCommitted`.
 
 ## RETURNING
 

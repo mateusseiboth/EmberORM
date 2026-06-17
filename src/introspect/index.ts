@@ -39,7 +39,7 @@ export class Introspector {
           constraints: await reader.constraints(),
         };
       },
-      { isolation: "READ_COMMITTED_READ_ONLY" },
+      { isolationLevel: "ReadCommitted" },
     );
 
     const columnsByTable = groupBy(columns, (c) => c.table);
