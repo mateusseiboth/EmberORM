@@ -126,6 +126,61 @@ describe("schema diff", () => {
     expect(diff.createdModels.map((m) => m.name)).toEqual(["Post"]);
   });
 
+  it("detects autoincrement added to an existing column", () => {
+    const current = parseSchema(`model VendasEntrega {
+      idempresa Int @map("IDEMPRESA")
+      idvenda   Int @map("IDVENDA")
+      @@id([idempresa, idvenda])
+      @@map("VENDAS_ENTREGA")
+    }`);
+    const desired = parseSchema(`model VendasEntrega {
+      idempresa Int @map("IDEMPRESA")
+      idvenda   Int @default(autoincrement()) @map("IDVENDA")
+      @@id([idempresa, idvenda])
+      @@map("VENDAS_ENTREGA")
+    }`);
+    const change = diffSchemas(desired, current).modelChanges.find(
+      (c) => c.table === "VENDAS_ENTREGA",
+    )!;
+    const cc = change.changedColumns.find((c) => c.field.name === "idvenda")!;
+    expect(cc.identityAdded).toBe(true);
+    expect(cc.typeChanged).toBe(false);
+    expect(cc.nullabilityChanged).toBe(false);
+  });
+
+  it("does not flag autoincrement when the column already has it", () => {
+    const schema = parseSchema(`model VendasEntrega {
+      idempresa Int @map("IDEMPRESA")
+      idvenda   Int @default(autoincrement()) @map("IDVENDA")
+      @@id([idempresa, idvenda])
+      @@map("VENDAS_ENTREGA")
+    }`);
+    const diff = diffSchemas(schema, schema);
+    expect(diff.modelChanges).toEqual([]);
+  });
+
+  it("does not emit a nullability change for a nullable-declared composite PK column", () => {
+    // The DB enforces NOT NULL on PK columns, so introspection reports them as
+    // required even when the schema declares them `Int?`. The diff must not try
+    // to drop NOT NULL (a no-op the engine ignores, re-emitted every run).
+    const desired = parseSchema(`model ComprasNotaRef {
+      idempresa Int? @map("IDEMPRESA")
+      idcompra  Int? @map("IDCOMPRA")
+      iditem    Int? @map("IDITEM")
+      @@id([idempresa, idcompra, iditem])
+      @@map("COMPRAS_NOTA_REF")
+    }`);
+    const current = parseSchema(`model ComprasNotaRef {
+      idempresa Int @map("IDEMPRESA")
+      idcompra  Int @map("IDCOMPRA")
+      iditem    Int @map("IDITEM")
+      @@id([idempresa, idcompra, iditem])
+      @@map("COMPRAS_NOTA_REF")
+    }`);
+    const diff = diffSchemas(desired, current);
+    expect(diff.modelChanges).toEqual([]);
+  });
+
   it("detects dropped tables", () => {
     const current = parseSchema(`model User {
       id Int @id
@@ -155,6 +210,27 @@ describe("planner", () => {
     expect(createPost).toBeGreaterThanOrEqual(0);
     expect(fk).toBeGreaterThan(createUsers);
     expect(fk).toBeGreaterThan(createPost);
+  });
+
+  it("emits a sequence + BEFORE INSERT trigger when identity is added to a column", () => {
+    const current = parseSchema(`model VendasEntrega {
+      idempresa Int @map("IDEMPRESA")
+      idvenda   Int @map("IDVENDA")
+      @@id([idempresa, idvenda])
+      @@map("VENDAS_ENTREGA")
+    }`);
+    const desired = parseSchema(`model VendasEntrega {
+      idempresa Int @map("IDEMPRESA")
+      idvenda   Int @default(autoincrement()) @map("IDVENDA")
+      @@id([idempresa, idvenda])
+      @@map("VENDAS_ENTREGA")
+    }`);
+    const v25 = new FirebirdDialect({ version: "2.5" });
+    const stmts = planMigration(diffSchemas(desired, current), desired, v25);
+    expect(stmts.some((s) => /CREATE SEQUENCE "GEN_VENDAS_ENTREGA_IDVENDA"/.test(s))).toBe(true);
+    const trigger = stmts.find((s) => /CREATE TRIGGER/.test(s))!;
+    expect(trigger).toContain("BEFORE INSERT");
+    expect(trigger).toContain('NEW."IDVENDA" = GEN_ID("GEN_VENDAS_ENTREGA_IDVENDA", 1)');
   });
 
   it("round-trips through render/split", () => {

@@ -125,9 +125,12 @@ export class Migrator {
     const id = `${timestamp()}_${slug(name)}`;
     const dir = join(this.migrationsDir, id);
     const body = renderMigrationSql(statements);
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "migration.sql"), body, "utf8");
 
+    // Apply first, then persist the file. Writing the migration folder before a
+    // failing apply leaves an orphan directory that the next `dev` run cannot
+    // tell from a real migration, so it re-diffs and emits a *second* identical
+    // migration. Applying atomically (DDL + history row in one transaction)
+    // first means a failed run leaves nothing on disk to duplicate.
     await this.ensureHistory();
     await this.driver.transaction(async (tx) => {
       await this.apply(tx, statements);
@@ -137,6 +140,9 @@ export class Migrator {
         steps: statements.length,
       });
     });
+
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "migration.sql"), body, "utf8");
 
     return { empty: false, id, dir, statements };
   }

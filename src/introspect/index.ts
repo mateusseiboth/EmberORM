@@ -42,17 +42,28 @@ export class Introspector {
   }
 
   async introspect(options: IntrospectOptions = {}): Promise<SchemaDocument> {
-    const { tables, columns, constraints } = await this.driver.transaction(
-      async (tx) => {
-        const reader = new FirebirdMetadataReader(tx);
-        return {
-          tables: await reader.tables(),
-          columns: await reader.columns(),
-          constraints: await reader.constraints(),
-        };
-      },
-      { isolationLevel: "ReadCommitted" },
-    );
+    const { tables, columns, constraints, autoincrement } =
+      await this.driver.transaction(
+        async (tx) => {
+          const reader = new FirebirdMetadataReader(tx);
+          return {
+            tables: await reader.tables(),
+            columns: await reader.columns(),
+            constraints: await reader.constraints(),
+            autoincrement: await reader.autoincrementColumns(),
+          };
+        },
+        { isolationLevel: "ReadCommitted" },
+      );
+
+    // Pre-3.0 engines have no native IDENTITY: fold trigger-based autoincrement
+    // back into the column so the schema round-trips and the migrator stays
+    // idempotent (no repeated sequence/trigger DDL).
+    for (const col of columns) {
+      if (!col.isIdentity && autoincrement.has(`${col.table}.${col.name}`)) {
+        col.isIdentity = true;
+      }
+    }
 
     const columnsByTable = groupBy(columns, (c) => c.table);
     const constraintsByTable = groupBy(constraints, (c) => c.table);
@@ -131,6 +142,10 @@ function buildField(
   const mapped = mapColumnType(col);
   const isSingleIdCol =
     !!pk && pk.columns.length === 1 && pk.columns[0] === col.name;
+  // Any primary-key member (single or composite) is NOT NULL by definition, so
+  // it must round-trip as required — otherwise a later diff sees a phantom
+  // nullability change against the DB-enforced NOT NULL.
+  const isPkCol = !!pk && pk.columns.includes(col.name);
   const isSingleUnique = uniques.some(
     (u) => u.columns.length === 1 && u.columns[0] === col.name,
   );
@@ -140,7 +155,7 @@ function buildField(
     type: mapped.scalar,
     kind: "scalar",
     isList: false,
-    isRequired: col.notNull || isSingleIdCol,
+    isRequired: col.notNull || isPkCol,
     isId: isSingleIdCol,
     isUnique: isSingleUnique,
     isUpdatedAt: false,

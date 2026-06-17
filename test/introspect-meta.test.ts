@@ -49,6 +49,39 @@ describe("FirebirdMetadataReader.columns", () => {
     expect(columnsSql).toContain("RDB$IDENTITY_TYPE");
   });
 
+  it("detects trigger-based autoincrement columns (Firebird 2.x identity)", async () => {
+    const sql: string[] = [];
+    const tx: TransactionContext = {
+      query: async <T>(text: string) => {
+        sql.push(text);
+        if (/RDB\$TRIGGERS/.test(text)) {
+          return [
+            {
+              TABLE_NAME: "VENDAS_ENTREGA",
+              SRC:
+                "BEGIN\n  IF (NEW.\"IDVENDA\" IS NULL) THEN " +
+                'NEW."IDVENDA" = GEN_ID("GEN_VENDAS_ENTREGA_IDVENDA", 1);\nEND',
+            },
+            {
+              TABLE_NAME: "PEDIDO",
+              SRC: "BEGIN NEW.ID = NEXT VALUE FOR GEN_PEDIDO; END",
+            },
+            // Not an autoincrement trigger: must be ignored.
+            { TABLE_NAME: "LOG", SRC: "BEGIN NEW.TS = CURRENT_TIMESTAMP; END" },
+          ] as T[];
+        }
+        return [] as T[];
+      },
+    };
+    const auto = await new FirebirdMetadataReader(tx).autoincrementColumns();
+    const triggersSql = sql.find((s) => /RDB\$TRIGGERS/.test(s))!;
+    expect(triggersSql).toContain("RDB$TRIGGER_TYPE = 1"); // BEFORE INSERT
+    expect(triggersSql).toContain("CAST(RDB$TRIGGER_SOURCE AS VARCHAR");
+    expect(auto.has("VENDAS_ENTREGA.IDVENDA")).toBe(true);
+    expect(auto.has("PEDIDO.ID")).toBe(true);
+    expect(auto.has("LOG.TS")).toBe(false);
+  });
+
   it("falls back to the conservative subset when version is unavailable", async () => {
     const sql: string[] = [];
     const tx: TransactionContext = {

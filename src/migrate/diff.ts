@@ -4,6 +4,7 @@ import {
   type NativeType,
   type SchemaDocument,
   fieldColumn,
+  idFields,
   modelTable,
   relationFields,
   scalarFields,
@@ -14,6 +15,8 @@ export interface ColumnChange {
   table: string;
   typeChanged: boolean;
   nullabilityChanged: boolean;
+  /** Desired column is autoincrement but the live column is not. */
+  identityAdded: boolean;
 }
 
 export interface UniqueSpec {
@@ -104,6 +107,11 @@ function diffModel(
   const currentCols = new Map(
     scalarFields(current).map((f) => [fieldColumn(f), f]),
   );
+  // Primary-key columns are NOT NULL by definition in every SQL engine
+  // (Firebird forces this even when the column is declared nullable). Treating
+  // a PK member as required avoids a phantom "drop NOT NULL" that the database
+  // silently ignores and the diff then re-emits on every run.
+  const pkColumns = new Set(idFields(model).map((f) => fieldColumn(f)));
 
   const addedColumns: FieldNode[] = [];
   const changedColumns: ColumnChange[] = [];
@@ -114,9 +122,17 @@ function diffModel(
       continue;
     }
     const typeChanged = !sameColumnType(field, existing);
-    const nullabilityChanged = field.isRequired !== existing.isRequired;
-    if (typeChanged || nullabilityChanged) {
-      changedColumns.push({ field, table, typeChanged, nullabilityChanged });
+    const desiredRequired = field.isRequired || pkColumns.has(col);
+    const nullabilityChanged = desiredRequired !== existing.isRequired;
+    const identityAdded = isAutoincrement(field) && !isAutoincrement(existing);
+    if (typeChanged || nullabilityChanged || identityAdded) {
+      changedColumns.push({
+        field,
+        table,
+        typeChanged,
+        nullabilityChanged,
+        identityAdded,
+      });
     }
   }
 
@@ -205,6 +221,11 @@ function columnFor(model: ModelNode, fieldName: string): string {
 }
 
 // ---- comparison helpers ---------------------------------------------------
+
+/** A field is autoincrement when its default is the `autoincrement()` function. */
+function isAutoincrement(field: FieldNode): boolean {
+  return field.default?.function?.name === "autoincrement";
+}
 
 function sameColumnType(a: FieldNode, b: FieldNode): boolean {
   if (a.type !== b.type) return false;

@@ -96,6 +96,38 @@ export class FirebirdMetadataReader {
   }
 
   /**
+   * Columns made autoincrement by a BEFORE INSERT trigger that assigns the
+   * column from a generator (`GEN_ID(...)` / `NEXT VALUE FOR ...`). This is how
+   * Firebird 2.1/2.5 emulate identity (they have no native IDENTITY), so without
+   * this the migrator would re-emit the sequence + trigger on every run because
+   * RDB$IDENTITY_TYPE does not exist on those engines. Keyed as `TABLE.COLUMN`.
+   */
+  async autoincrementColumns(): Promise<Set<string>> {
+    // RDB$TRIGGER_TYPE = 1 is BEFORE INSERT. The source is a BLOB; CAST to
+    // VARCHAR for the same node-firebird 1.1.9 BLOB-decoding reason as columns().
+    const rows = await this.tx.query<Record<string, unknown>>(
+      `SELECT RDB$RELATION_NAME AS TABLE_NAME,
+              CAST(RDB$TRIGGER_SOURCE AS VARCHAR(8191)) AS SRC
+       FROM RDB$TRIGGERS
+       WHERE RDB$TRIGGER_TYPE = 1
+         AND (RDB$TRIGGER_INACTIVE IS NULL OR RDB$TRIGGER_INACTIVE = 0)
+         AND (RDB$SYSTEM_FLAG IS NULL OR RDB$SYSTEM_FLAG = 0)`,
+    );
+    const result = new Set<string>();
+    for (const r of rows) {
+      const table = trim(r.TABLE_NAME);
+      const src = trim(r.SRC);
+      if (!table || !src) continue;
+      // NEW."COL" = GEN_ID(...)  |  NEW.COL = NEXT VALUE FOR ...
+      const re = /NEW\.\s*"?([A-Za-z0-9_$]+)"?\s*=\s*(?:GEN_ID\s*\(|NEXT\s+VALUE\s+FOR)/gi;
+      for (let m = re.exec(src); m; m = re.exec(src)) {
+        result.add(`${table}.${m[1]!.toUpperCase()}`);
+      }
+    }
+    return result;
+  }
+
+  /**
    * Detect the live server version as a {@link FirebirdVersion} so the migrator
    * can pick the right DDL dialect (BOOLEAN vs SMALLINT, IDENTITY vs
    * generator+trigger, `SET NOT NULL` vs catalog update). Major 2 maps to the

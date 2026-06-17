@@ -1,5 +1,5 @@
 import { type SqlDialect } from "@ember/sql";
-import { type SchemaDocument, fieldColumn, modelTable } from "@ember/ast";
+import { type SchemaDocument, fieldColumn, idFields, modelTable } from "@ember/ast";
 import { FirebirdDdl, isIdentity } from "./ddl";
 import {
   type SchemaDiff,
@@ -71,6 +71,10 @@ export function planMigration(
 
   // 3. Existing-table changes.
   for (const change of diff.modelChanges) {
+    // PK columns are implicitly NOT NULL; never emit a DROP NOT NULL for them.
+    const pkColumns = new Set(
+      idFields(change.model).map((f) => fieldColumn(f)),
+    );
     for (const field of change.addedColumns) {
       alters.push(ddl.addColumn(change.table, field));
       if (isIdentity(field)) {
@@ -82,9 +86,14 @@ export function planMigration(
     for (const cc of change.changedColumns) {
       if (cc.typeChanged) alters.push(ddl.alterColumnType(cc.table, cc.field));
       if (cc.nullabilityChanged) {
-        alters.push(
-          ddl.setNotNull(cc.table, columnName(cc), cc.field.isRequired),
-        );
+        const required = cc.field.isRequired || pkColumns.has(columnName(cc));
+        alters.push(ddl.setNotNull(cc.table, columnName(cc), required));
+      }
+      // Autoincrement added to an existing column: emit the sequence + BEFORE
+      // INSERT trigger (Firebird 2.1/2.5). On engines with native IDENTITY this
+      // yields nothing — see autoIncrementForColumn.
+      if (cc.identityAdded) {
+        creates.push(...ddl.autoIncrementForColumn(cc.table, columnName(cc)));
       }
     }
     for (const uq of change.addedUniques) {
