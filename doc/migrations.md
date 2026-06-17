@@ -69,6 +69,7 @@ is created automatically and always excluded from the diff.
 | Add / drop column                        | ✅        |
 | Alter column type                        | ✅        |
 | Set / drop `NOT NULL`                     | ✅        |
+| Add autoincrement to an existing column  | ✅ (seq + trigger on FB 2.x) |
 | Add `UNIQUE` (single & composite)        | ✅        |
 | Add foreign key (incl. composite)        | ✅        |
 | Create index / unique on new tables      | ✅        |
@@ -79,6 +80,30 @@ is created automatically and always excluded from the diff.
 DDL ordering is always safe: drops → create tables → alter columns →
 constraints → indexes → **foreign keys last**, so referenced tables and columns
 always exist first.
+
+### Round-trip idempotency gotchas (Firebird 2.x)
+
+Two traps make `migrate dev` emit phantom statements on every run unless handled,
+because Firebird 2.1/2.5 don't represent these the way the schema does:
+
+- **Trigger-based autoincrement.** Pre-3.0 engines have no native `IDENTITY`, so
+  `@default(autoincrement())` is emulated with a `SEQUENCE` + `BEFORE INSERT`
+  trigger. `RDB$IDENTITY_TYPE` doesn't exist there, so introspection instead
+  scans `RDB$TRIGGERS` (`RDB$TRIGGER_TYPE = 1`) for a body assigning
+  `NEW."COL" = GEN_ID(...)`/`NEXT VALUE FOR ...` and folds it back into the
+  column as autoincrement. Adding autoincrement to an **existing** column is a
+  `changedColumns` entry (`identityAdded`), not an `addedColumn`, and the planner
+  emits the sequence + trigger for it.
+- **Nullable-declared PK columns.** A primary-key column is NOT NULL in every SQL
+  engine — Firebird enforces it even when the column is declared `Int?`. So the
+  diff treats any PK member as required (and introspection marks it required),
+  otherwise it forever tries to "drop NOT NULL" on PK columns (a no-op the engine
+  ignores and the next diff re-emits).
+
+`migrate dev` also writes the `migration.sql` file **only after** the apply +
+history-insert transaction succeeds. Writing it first left an orphan migration
+folder on a failed apply, which the next run could not distinguish from a real
+migration — so it re-diffed and produced a second identical migration.
 
 ## Type mapping (schema → DDL)
 
