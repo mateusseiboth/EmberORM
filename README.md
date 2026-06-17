@@ -97,7 +97,7 @@ model Post {
 | Fluent API        | relation traversal: `db.user.findUnique(...).posts()`                       |
 | More ops          | `omit`, `createManyAndReturn`, groupBy `having`                            |
 | Counts            | relation `_count` in `select`/`include`                                    |
-| Versions          | Firebird 2.1 / 2.5 / 3 / 4 / 5 (`?version=`), Srp & legacy auth            |
+| Versions          | Firebird 2.1 / 2.5 / 3 / 4 / 5 (auto-detected; `?version=` to override)    |
 | Logging           | `log: true` or a `QueryEvent` callback                                     |
 | Studio            | `ember studio` — local web GUI to browse & edit data (CRUD)               |
 | Tooling           | `ember init / db pull / generate / format / validate / studio`            |
