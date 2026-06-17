@@ -5,7 +5,7 @@ import {
   type ModelNode,
   type SchemaDocument,
 } from "@ember/ast";
-import type { SqlDriver } from "@ember/driver";
+import type { FirebirdVersion, SqlDriver } from "@ember/driver";
 import { camelCase, lowerFirst, pascalCase, pluralize, uniq } from "@ember/utils";
 import {
   FirebirdMetadataReader,
@@ -28,6 +28,18 @@ export interface IntrospectOptions {
  */
 export class Introspector {
   constructor(private readonly driver: SqlDriver) {}
+
+  /**
+   * Query the live server for its {@link FirebirdVersion}. Used to auto-select
+   * the DDL dialect when the connection URL omits `?version=`. Returns
+   * `undefined` when the version cannot be determined.
+   */
+  async serverVersion(): Promise<FirebirdVersion | undefined> {
+    return this.driver.transaction(
+      async (tx) => new FirebirdMetadataReader(tx).firebirdVersion(),
+      { isolationLevel: "ReadCommitted" },
+    );
+  }
 
   async introspect(options: IntrospectOptions = {}): Promise<SchemaDocument> {
     const { tables, columns, constraints } = await this.driver.transaction(

@@ -1,7 +1,8 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type SchemaDocument, modelTable } from "@ember/ast";
-import type { SqlDriver } from "@ember/driver";
+import type { SqlDriver, TransactionContext } from "@ember/driver";
+import { EmberError } from "@ember/errors";
 import { FirebirdDialect, type SqlDialect } from "@ember/sql";
 import { Introspector } from "@ember/introspect";
 import { diffSchemas, type SchemaDiff } from "./diff";
@@ -24,6 +25,14 @@ export {
   appliedMigrations,
   ensureHistoryTable,
 } from "./history";
+
+export interface MigratorOptions {
+  /**
+   * Called with each generated SQL statement right before it runs. Wired to the
+   * CLI `--log` flag so users can see exactly what DDL is being executed.
+   */
+  log?: (message: string) => void;
+}
 
 export interface DevResult {
   empty: boolean;
@@ -48,14 +57,40 @@ export interface StatusResult {
  */
 export class Migrator {
   private readonly dialect: SqlDialect;
+  private readonly log?: (message: string) => void;
 
   constructor(
     private readonly driver: SqlDriver,
     private readonly desired: SchemaDocument,
     private readonly migrationsDir: string,
     dialect?: SqlDialect,
+    options: MigratorOptions = {},
   ) {
     this.dialect = dialect ?? new FirebirdDialect();
+    this.log = options.log;
+  }
+
+  /**
+   * Run each statement in order, logging it first (when `--log` is set) and
+   * wrapping any failure with the offending step so it's clear which statement
+   * broke rather than just surfacing an opaque driver error.
+   */
+  private async apply(
+    tx: TransactionContext,
+    statements: string[],
+  ): Promise<void> {
+    for (let i = 0; i < statements.length; i++) {
+      const stmt = statements[i]!;
+      this.log?.(`-- step ${i + 1}/${statements.length}\n${stmt};`);
+      try {
+        await tx.query(stmt);
+      } catch (err) {
+        throw new EmberError(
+          `Migration step ${i + 1}/${statements.length} failed:\n` +
+            `${stmt}\n\n${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
   }
 
   /** Compute the diff between the desired schema and the live database. */
@@ -86,7 +121,7 @@ export class Migrator {
 
     await this.driver.transaction(async (tx) => {
       await ensureHistoryTable(tx, this.dialect);
-      for (const stmt of statements) await tx.query(stmt);
+      await this.apply(tx, statements);
       await recordMigration(tx, this.dialect, {
         id,
         checksum: checksum(body),
@@ -105,7 +140,7 @@ export class Migrator {
     const statements = await this.plan();
     if (statements.length === 0) return { statements: [] };
     await this.driver.transaction(async (tx) => {
-      for (const stmt of statements) await tx.query(stmt);
+      await this.apply(tx, statements);
     });
     return { statements };
   }
@@ -124,7 +159,7 @@ export class Migrator {
       if (known.has(migration.id)) continue;
       const statements = splitStatements(migration.sql);
       await this.driver.transaction(async (tx) => {
-        for (const stmt of statements) await tx.query(stmt);
+        await this.apply(tx, statements);
         await recordMigration(tx, this.dialect, {
           id: migration.id,
           checksum: checksum(migration.sql),

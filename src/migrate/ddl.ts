@@ -140,10 +140,29 @@ export class FirebirdDdl {
   }
 
   setNotNull(table: string, column: string, notNull: boolean): string {
+    // Firebird 2.1/2.5 has no `ALTER COLUMN ... SET/DROP NOT NULL`; toggling the
+    // NULL flag in the catalog is the supported equivalent on those servers.
+    if (!this.d.supportsAlterNotNull) {
+      return this.setNotNullViaCatalog(table, column, notNull);
+    }
     const action = notNull ? "SET NOT NULL" : "DROP NOT NULL";
     return `ALTER TABLE ${this.d.quoteId(table)} ALTER COLUMN ${this.d.quoteId(
       column,
     )} ${action}`;
+  }
+
+  /** Firebird 2.1/2.5 NOT NULL toggle via the RDB$RELATION_FIELDS catalog. */
+  private setNotNullViaCatalog(
+    table: string,
+    column: string,
+    notNull: boolean,
+  ): string {
+    const flag = notNull ? "1" : "NULL";
+    return (
+      `UPDATE RDB$RELATION_FIELDS SET RDB$NULL_FLAG = ${flag} ` +
+      `WHERE RDB$RELATION_NAME = ${quoteLiteral(table)} ` +
+      `AND RDB$FIELD_NAME = ${quoteLiteral(column)}`
+    );
   }
 
   // ---- constraints & indexes ---------------------------------------------
@@ -218,6 +237,11 @@ function capName(name: string): string {
   let hash = 0;
   for (let i = 0; i < safe.length; i++) hash = (hash * 31 + safe.charCodeAt(i)) | 0;
   return `${safe.slice(0, 24)}_${Math.abs(hash).toString(36).slice(0, 6)}`;
+}
+
+/** Single-quote and escape a string for a SQL literal. */
+function quoteLiteral(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
 }
 
 function defaultClause(def: DefaultValue | undefined): string | null {

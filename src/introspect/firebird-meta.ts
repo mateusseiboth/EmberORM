@@ -1,4 +1,4 @@
-import type { TransactionContext } from "@ember/driver";
+import type { FirebirdVersion, TransactionContext } from "@ember/driver";
 
 /** Raw column metadata as read from RDB$ system tables (already trimmed). */
 export interface RawColumn {
@@ -54,7 +54,7 @@ export class FirebirdMetadataReader {
     // RDB$DEFAULT_SOURCE is a BLOB and is CAST to VARCHAR: node-firebird 1.1.9
     // crashes the process while decoding BLOB columns in a multi-row result set
     // (TypeError: reading 'statement'), so we never fetch it as a BLOB.
-    const hasIdentity = (await this.engineMajorVersion()) >= 3;
+    const hasIdentity = (await this.engineMajorVersion() ?? 0) >= 3;
     const identitySelect = hasIdentity
       ? "rf.RDB$IDENTITY_TYPE      AS IDENTITY_TYPE,"
       : "";
@@ -96,11 +96,35 @@ export class FirebirdMetadataReader {
   }
 
   /**
-   * Detect the Firebird engine major version (e.g. 2, 3, 4, 5) so version-only
-   * catalog columns can be selected conditionally. Falls back to 2 (the most
-   * conservative subset) if the context variable is unavailable.
+   * Detect the live server version as a {@link FirebirdVersion} so the migrator
+   * can pick the right DDL dialect (BOOLEAN vs SMALLINT, IDENTITY vs
+   * generator+trigger, `SET NOT NULL` vs catalog update). Major 2 maps to the
+   * conservative "2.5" subset. Returns `undefined` when detection fails, letting
+   * callers keep their explicit/default version.
    */
-  private async engineMajorVersion(): Promise<number> {
+  async firebirdVersion(): Promise<FirebirdVersion | undefined> {
+    const major = await this.engineMajorVersion();
+    switch (major) {
+      case 2:
+        return "2.5";
+      case 3:
+        return "3";
+      case 4:
+        return "4";
+      case 5:
+        return "5";
+      default:
+        return undefined;
+    }
+  }
+
+  /**
+   * Detect the Firebird engine major version (e.g. 2, 3, 4, 5) so version-only
+   * catalog columns can be selected conditionally. Returns `undefined` when the
+   * context variable is unavailable; callers treat that as the most
+   * conservative (pre-3) subset.
+   */
+  private async engineMajorVersion(): Promise<number | undefined> {
     try {
       const rows = await this.tx.query<Record<string, unknown>>(
         `SELECT rdb$get_context('SYSTEM', 'ENGINE_VERSION') AS V
@@ -108,9 +132,9 @@ export class FirebirdMetadataReader {
       );
       const raw = trim(rows[0]?.V);
       const major = Number.parseInt(raw.split(".")[0] ?? "", 10);
-      return Number.isFinite(major) ? major : 2;
+      return Number.isFinite(major) ? major : undefined;
     } catch {
-      return 2;
+      return undefined;
     }
   }
 

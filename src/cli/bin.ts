@@ -38,6 +38,7 @@ Options:
   --url <url>          Firebird connection URL (overrides datasource/env)
   --name <name>        Migration name (migrate dev)
   --port <n>           Port for EmberStudio (default 5757)
+  --log                Print each SQL statement as it runs (migrate/db push)
   --no-open            Don't open the browser (studio)
   -h, --help           Show this help
   -v, --version        Show version
@@ -97,6 +98,7 @@ async function main(): Promise<number> {
   const name = typeof flags.name === "string" ? flags.name : undefined;
   const port =
     typeof flags.port === "string" ? Number.parseInt(flags.port, 10) : undefined;
+  const log = flags.log === true;
   const [first, second] = command;
 
   switch (first) {
@@ -117,12 +119,14 @@ async function main(): Promise<number> {
       });
     case "db":
       if (second === "pull") return dbPull(ctx, { schemaPath, url });
-      if (second === "push") return dbPush(ctx, { schemaPath, url });
+      if (second === "push") return dbPush(ctx, { schemaPath, url, log });
       ctx.error(`Unknown db subcommand '${second ?? ""}'.`);
       return 1;
     case "migrate":
-      if (second === "dev") return migrateDev(ctx, { schemaPath, url, name });
-      if (second === "deploy") return migrateDeploy(ctx, { schemaPath, url });
+      if (second === "dev")
+        return migrateDev(ctx, { schemaPath, url, name, log });
+      if (second === "deploy")
+        return migrateDeploy(ctx, { schemaPath, url, log });
       if (second === "status") return migrateStatus(ctx, { schemaPath, url });
       ctx.error(`Unknown migrate subcommand '${second ?? ""}'.`);
       return 1;

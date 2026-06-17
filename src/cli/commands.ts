@@ -10,6 +10,7 @@ import {
 } from "@ember/schema";
 import {
   createDriver,
+  type FirebirdVersion,
   parseConnectionUrl,
   type SqlDriver,
 } from "@ember/driver";
@@ -143,7 +144,7 @@ export async function dbPull(
 /** `ember migrate dev [--name x]` — diff, write a migration file, apply it. */
 export async function migrateDev(
   ctx: CliContext,
-  options: { schemaPath?: string; url?: string; name?: string },
+  options: { schemaPath?: string; url?: string; name?: string; log?: boolean },
 ): Promise<number> {
   return withMigrator(ctx, options, async (migrator) => {
     const result = await migrator.dev(options.name ?? "migration");
@@ -159,7 +160,7 @@ export async function migrateDev(
 /** `ember migrate deploy` — apply all pending migration files. */
 export async function migrateDeploy(
   ctx: CliContext,
-  options: { schemaPath?: string; url?: string },
+  options: { schemaPath?: string; url?: string; log?: boolean },
 ): Promise<number> {
   return withMigrator(ctx, options, async (migrator) => {
     const { applied } = await migrator.deploy();
@@ -190,7 +191,7 @@ export async function migrateStatus(
 /** `ember db push` — apply the diff directly without creating a migration. */
 export async function dbPush(
   ctx: CliContext,
-  options: { schemaPath?: string; url?: string },
+  options: { schemaPath?: string; url?: string; log?: boolean },
 ): Promise<number> {
   return withMigrator(ctx, options, async (migrator) => {
     const { statements } = await migrator.push();
@@ -264,7 +265,7 @@ export async function studio(
 /** Resolve schema + URL, open a driver, build a Migrator, and run `fn`. */
 async function withMigrator(
   ctx: CliContext,
-  options: { schemaPath?: string; url?: string },
+  options: { schemaPath?: string; url?: string; log?: boolean },
   fn: (migrator: Migrator) => Promise<number>,
 ): Promise<number> {
   const path = requireSchema(ctx, options.schemaPath);
@@ -284,14 +285,34 @@ async function withMigrator(
 
   const migrationsDir = resolve(dirname(path), "migrations");
   const config = parseConnectionUrl(url);
-  const dialect = new FirebirdDialect({ version: config.version });
   const driver: SqlDriver = createDriver(config);
   try {
     await driver.connect();
-    const migrator = new Migrator(driver, document, migrationsDir, dialect);
+    // The URL version (if any) wins; otherwise detect the live server so DDL
+    // matches the engine (BOOLEAN/IDENTITY/`SET NOT NULL` differ pre-3.0).
+    const version = config.version ?? (await detectServerVersion(ctx, driver));
+    const dialect = new FirebirdDialect({ version });
+    const log = options.log ? (m: string) => ctx.log(m) : undefined;
+    const migrator = new Migrator(driver, document, migrationsDir, dialect, {
+      log,
+    });
     return await fn(migrator);
   } finally {
     await driver.disconnect();
+  }
+}
+
+/** Best-effort detection of the live Firebird version for DDL generation. */
+async function detectServerVersion(
+  ctx: CliContext,
+  driver: SqlDriver,
+): Promise<FirebirdVersion | undefined> {
+  try {
+    const version = await new Introspector(driver).serverVersion();
+    if (version) ctx.log(`Detected Firebird ${version}.`);
+    return version;
+  } catch {
+    return undefined;
   }
 }
 

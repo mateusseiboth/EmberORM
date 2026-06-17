@@ -27,6 +27,11 @@ export interface SqlDialect {
   readonly supportsIdentity: boolean;
   /** Window functions like ROW_NUMBER() OVER (...) (Firebird 3+). */
   readonly supportsWindowFunctions: boolean;
+  /**
+   * `ALTER COLUMN ... {SET | DROP} NOT NULL` DDL (Firebird 3+). On 2.1/2.5 the
+   * NOT NULL flag must be toggled via an RDB$RELATION_FIELDS catalog update.
+   */
+  readonly supportsAlterNotNull: boolean;
   /** DDL type used for boolean columns. */
   booleanColumnType(): string;
 }
@@ -48,6 +53,7 @@ export class FirebirdDialect implements SqlDialect {
   readonly supportsBooleanType: boolean;
   readonly supportsIdentity: boolean;
   readonly supportsWindowFunctions: boolean;
+  readonly supportsAlterNotNull: boolean;
 
   constructor(options: FirebirdDialectOptions = {}) {
     this.version = options.version ?? "3";
@@ -55,6 +61,7 @@ export class FirebirdDialect implements SqlDialect {
     this.supportsBooleanType = rank >= 30;
     this.supportsIdentity = rank >= 30;
     this.supportsWindowFunctions = rank >= 30;
+    this.supportsAlterNotNull = rank >= 30;
   }
 
   booleanColumnType(): string {

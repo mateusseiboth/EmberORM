@@ -69,6 +69,27 @@ describe("DDL generator", () => {
     expect(trigger).toContain("NEW.\"ID\" IS NULL");
   });
 
+  it("uses ALTER COLUMN SET/DROP NOT NULL on Firebird 3+", () => {
+    expect(ddl.setNotNull("POST", "TITLE", true)).toBe(
+      'ALTER TABLE "POST" ALTER COLUMN "TITLE" SET NOT NULL',
+    );
+    expect(ddl.setNotNull("POST", "TITLE", false)).toBe(
+      'ALTER TABLE "POST" ALTER COLUMN "TITLE" DROP NOT NULL',
+    );
+  });
+
+  it("toggles the NOT NULL flag via the catalog on Firebird 2.5", () => {
+    const ddl25 = new FirebirdDdl(new FirebirdDialect({ version: "2.5" }));
+    expect(ddl25.setNotNull("POST", "TITLE", true)).toBe(
+      "UPDATE RDB$RELATION_FIELDS SET RDB$NULL_FLAG = 1 " +
+        "WHERE RDB$RELATION_NAME = 'POST' AND RDB$FIELD_NAME = 'TITLE'",
+    );
+    expect(ddl25.setNotNull("POST", "TITLE", false)).toBe(
+      "UPDATE RDB$RELATION_FIELDS SET RDB$NULL_FLAG = NULL " +
+        "WHERE RDB$RELATION_NAME = 'POST' AND RDB$FIELD_NAME = 'TITLE'",
+    );
+  });
+
   it("builds ALTER and FK statements", () => {
     const post = findModel(DESIRED, "Post")!;
     const title = post.fields.find((f) => f.name === "title")!;
@@ -194,6 +215,45 @@ describe("Migrator", () => {
     // the DDL plus a history INSERT were executed against the driver
     expect(driver.statements.some((s) => /CREATE TABLE "USERS"/.test(s))).toBe(true);
     expect(driver.statements.some((s) => /INSERT INTO "_EMBER_MIGRATIONS"/.test(s))).toBe(true);
+  });
+
+  it("logs each statement when a logger is provided", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "ember-mig-"));
+    const logged: string[] = [];
+    const migrator = new Migrator(new MockDriver(), DESIRED, dir, dialect, {
+      log: (m) => logged.push(m),
+    });
+
+    await migrator.dev("init");
+    expect(logged.some((m) => /CREATE TABLE "USERS"/.test(m))).toBe(true);
+    expect(logged.every((m) => /^-- step \d+\/\d+/.test(m))).toBe(true);
+  });
+
+  it("surfaces the offending statement when a step fails", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "ember-mig-"));
+
+    class FailingDriver implements SqlDriver {
+      async connect() {}
+      async disconnect() {}
+      async transaction<T>(fn: (tx: TransactionContext) => Promise<T>): Promise<T> {
+        const tx: TransactionContext = {
+          query: async (sql) => {
+            if (/COUNT\(\*\) AS N/.test(sql)) return [{ N: 0 }] as any;
+            if (/RDB\$RELATION/.test(sql)) return [] as any;
+            if (/CREATE TABLE "USERS"/.test(sql)) {
+              throw new Error("Token unknown - line 1, column 62, NOT");
+            }
+            return [] as any;
+          },
+        };
+        return fn(tx);
+      }
+    }
+
+    const migrator = new Migrator(new FailingDriver(), DESIRED, dir, dialect);
+    await expect(migrator.dev("init")).rejects.toThrow(
+      /Migration step \d+\/\d+ failed:[\s\S]*CREATE TABLE[\s\S]*Token unknown/,
+    );
   });
 
   it("dev reports an empty diff when schema matches the database", async () => {
