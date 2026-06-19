@@ -1,6 +1,6 @@
 {
   "name": "@mateusseiboth/ember-orm",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "description": "Prisma-like ORM for Firebird. Schema, db pull, generated types, typed query API.",
   "license": "MIT",
   "author": "Mateus Seiboth",
@@ -72,7 +72,7 @@
     "node": ">=18"
   },
   "dependencies": {
-    "node-firebird": "^1.1.9"
+    "node-firebird": "^2.3.2"
   },
   "devDependencies": {
     "@codemirror/lang-sql": "^6.10.0",
