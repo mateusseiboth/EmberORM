@@ -54,6 +54,26 @@ is treated as an alias and the leading slash is stripped. Use `?alias=` to force
 alias semantics in ambiguous cases. `buildConnectionUrl` round-trips aliases via
 `?alias=`.
 
+## Character sets (`?encoding=`)
+
+The connection charset (`lc_ctype`) defaults to `UTF8` and is set with `?encoding=` or
+`ConnectionConfig.encoding`. The server transliterates columns that declare a charset
+(`ISO8859_1`, `WIN1252`, ...) into the connection charset, but columns declared as charset
+**`NONE`** travel as raw bytes and are decoded with the connection charset.
+
+Legacy databases written by Windows/Delphi applications usually have `NONE` columns holding
+ANSI bytes. Under the default `UTF8` connection those bytes are invalid UTF-8 and every accented
+letter comes back as `U+FFFD` (`SÃO` reads as `S�O`), a silent and lossy read. Connect with the
+charset the application wrote:
+
+```
+firebird://SYSDBA:masterkey@host:3050//db.fdb?encoding=WIN1252
+```
+
+Then both kinds of column read correctly: declared ones are transliterated to `WIN1252` by the
+server and `NONE` ones are decoded as `WIN1252`. Decoding `NONE` columns with the connection
+charset needs `node-firebird` 2.21 or later, the minimum this package requires.
+
 ## `.env` loading (CLI)
 
 Node (unlike Bun) does not auto-load `.env`, so the `ember` CLI loads it at
