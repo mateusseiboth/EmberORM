@@ -84,9 +84,16 @@ system catalog. Three Firebird-specific traps, all handled there:
    query for the same reason.
 
 Note: legacy databases often contain tables with **no primary key** (e.g. audit
-log tables like `IBE$LOG_*`). `db pull` introspects them, but schema validation
-requires every model to have `@id`/`@@id`, so such models need a manual key or
-removal before `ember generate`.
+log tables like `IBE$LOG_*`). `db pull` emits them with `@@ignoreId` and a `///`
+note, so the schema validates and the client can still read them; see
+[Models without a primary key](./schema-language.md#models-without-a-primary-key-ignoreid).
+
+Column names that start with a digit (Firebird accepts the quoted identifier
+`"1VIADESCRICAO"`) become fields prefixed with `_` (`_1viadescricao`) plus an
+`@map` with the real name, because a schema identifier cannot start with a digit.
+
+String defaults are pulled as quoted literals: `CHAR(1) DEFAULT 'S'` becomes
+`@default("S")` (a bare `@default(S)` would be read as an enum value).
 
 ## Query logging
 

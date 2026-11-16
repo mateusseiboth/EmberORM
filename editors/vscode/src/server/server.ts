@@ -356,6 +356,11 @@ const BLOCK_ATTRIBUTES = [
   { label: "@@unique", insert: "unique([$0])", doc: "Composite unique constraint." },
   { label: "@@index", insert: "index([$0])", doc: "Index." },
   { label: "@@map", insert: 'map("$0")', doc: "Database table name." },
+  {
+    label: "@@ignoreId",
+    insert: "ignoreId",
+    doc: "Table without a primary key: read and bulk operations only.",
+  },
 ];
 const HOVERS: Record<string, string> = {
   model: "**model** — a table-backed entity.",

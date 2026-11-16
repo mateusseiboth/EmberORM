@@ -31,9 +31,8 @@ export function applyCreateDefaults(
       if (computed !== SKIP) out[field.name] = computed;
       continue;
     }
-    if (def.literal !== undefined) {
-      out[field.name] = def.literal;
-    }
+    const value = def.enumValue ?? def.literal;
+    if (value !== undefined) out[field.name] = value;
   }
   return out;
 }

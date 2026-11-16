@@ -1,6 +1,7 @@
 import { SchemaValidationError } from "@ember/errors";
 import {
   SCALAR_TYPES,
+  type ModelNode,
   type SchemaDocument,
   findModel,
 } from "@ember/ast";
@@ -51,13 +52,7 @@ export function validateSchema(doc: SchemaDocument): void {
       }
     }
 
-    const hasId =
-      model.primaryKey.length > 0 || model.fields.some((f) => f.isId);
-    if (!hasId) {
-      errors.push(
-        `Model '${model.name}' has no @id / @@id. Every model needs a primary key.`,
-      );
-    }
+    errors.push(...primaryKeyErrors(model));
   }
 
   for (const enumNode of doc.enums) {
@@ -69,6 +64,23 @@ export function validateSchema(doc: SchemaDocument): void {
   if (errors.length > 0) {
     throw new SchemaValidationError("Schema validation failed", errors);
   }
+}
+
+/**
+ * A model needs a primary key, unless it opts out with `@@ignoreId` (a legacy
+ * table without one). Declaring both is contradictory.
+ */
+function primaryKeyErrors(model: ModelNode): string[] {
+  const hasId = model.primaryKey.length > 0 || model.fields.some((f) => f.isId);
+  if (hasId && model.ignoreId) {
+    return [
+      `Model '${model.name}' has a primary key and @@ignoreId. Remove @@ignoreId.`,
+    ];
+  }
+  if (hasId || model.ignoreId) return [];
+  return [
+    `Model '${model.name}' has no @id / @@id. Add a primary key, or @@ignoreId for a table without one (read and bulk operations only).`,
+  ];
 }
 
 function validateRelation(

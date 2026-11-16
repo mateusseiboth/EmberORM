@@ -19,6 +19,11 @@ Current, honest status of the implementation.
   transaction; it does not batch into a single multi-row INSERT.
 - Affected-row counts for `updateMany`/`deleteMany` come from a preceding
   `COUNT(*)` (see firebird-notes.md).
+- **Models without a primary key** (`@@ignoreId`) support reads and bulk writes
+  only: `findUnique`, `create`, `createManyAndReturn`, `update`, `upsert` and
+  `delete` are not generated and throw at runtime. A `@@unique` on such a table
+  is not used as a row identity. See
+  [schema-language.md](./schema-language.md#models-without-a-primary-key-ignoreid).
 
 ## Roadmap
 

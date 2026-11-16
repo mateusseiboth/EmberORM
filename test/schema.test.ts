@@ -58,7 +58,7 @@ describe("schema parser", () => {
 
     const role = user.fields.find((f) => f.name === "role")!;
     expect(role.kind).toBe("enum");
-    expect(role.default?.literal).toBe("USER");
+    expect(role.default?.enumValue).toBe("USER");
 
     const posts = user.fields.find((f) => f.name === "posts")!;
     expect(posts.kind).toBe("object");

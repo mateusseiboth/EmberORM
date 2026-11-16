@@ -127,19 +127,20 @@ function printDefault(def: DefaultValue): string {
       .map(printArgValue)
       .join(", ")})`;
   }
-  if (typeof def.literal === "string") {
-    // enum/ref defaults are unquoted identifiers
-    return /^[A-Za-z_][A-Za-z0-9_]*$/.test(def.literal)
-      ? def.literal
-      : `"${def.literal}"`;
-  }
+  if (def.enumValue !== undefined) return def.enumValue;
+  if (typeof def.literal === "string") return quoteString(def.literal);
   return String(def.literal);
+}
+
+/** A schema string literal, escaping what the lexer unescapes (`\` and `"`). */
+function quoteString(value: string): string {
+  return `"${value.replace(/[\\"]/g, (c) => `\\${c}`)}"`;
 }
 
 function printArgValue(v: AttributeArgValue): string {
   switch (v.kind) {
     case "string":
-      return `"${v.value}"`;
+      return quoteString(v.value);
     case "number":
       return String(v.value);
     case "boolean":
@@ -171,6 +172,7 @@ function modelBlockAttributes(model: ModelNode): string[] {
       `@@index([${i.fields.join(", ")}]${i.name ? `, map: "${i.name}"` : ""})`,
     );
   }
+  if (model.ignoreId) out.push("@@ignoreId");
   if (model.dbName) out.push(`@@map("${model.dbName}")`);
   return out;
 }

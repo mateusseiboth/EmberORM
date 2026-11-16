@@ -4,6 +4,7 @@ import {
   type SchemaDocument,
   fieldColumn,
   idFields,
+  isKeyless,
   modelTable,
 } from "@ember/ast";
 import { QueryValidationError, RecordNotFoundError } from "@ember/errors";
@@ -244,6 +245,7 @@ export class WriteProcessor {
     op: Record<string, unknown>,
   ): Promise<[string, SqlValue][]> {
     const rel = resolveRelation(this.schema, model, field);
+    requireKeyedTarget(rel, Object.keys(op));
     if (op.connect) {
       const ref = await this.lookupReference(rel, op.connect as WhereInput);
       return this.mapFkByField(rel, ref);
@@ -340,6 +342,8 @@ export class WriteProcessor {
     op: Record<string, unknown>,
   ): Promise<void> {
     const rel = resolveRelation(this.schema, parentModel, field);
+    requireKeyedParent(parentModel, field);
+    requireKeyedTarget(rel, Object.keys(op).filter((k) => k !== "create"));
     const fkColumns: [string, SqlValue][] = rel.toColumns.map((toCol, i) => {
       const fromField = rel.fromFields[i]!;
       return [toCol, this.dialect.coerceValue(parentKeys[fromField] ?? null)];
@@ -397,6 +401,26 @@ export class WriteProcessor {
     const stmt = compileUpdate(rel.relatedModel, matchWhere, assignments, this.ctx());
     await this.exec(stmt.sql);
   }
+}
+
+/**
+ * A nested write that must find the related row by key (connect, set,
+ * disconnect, delete, or reading back a created to-one target) cannot run
+ * against a `@@ignoreId` model.
+ */
+function requireKeyedTarget(rel: ResolvedRelation, ops: string[]): void {
+  if (!isKeyless(rel.relatedModel) || ops.length === 0) return;
+  throw new QueryValidationError(
+    `Nested ${ops.join("/")} on '${rel.field.name}' is not supported: '${rel.relatedModel.name}' has no primary key (@@ignoreId). Write the foreign-key field instead.`,
+  );
+}
+
+/** Children of a `@@ignoreId` row cannot receive its key. */
+function requireKeyedParent(parentModel: ModelNode, field: FieldNode): void {
+  if (!isKeyless(parentModel)) return;
+  throw new QueryValidationError(
+    `Nested write on '${parentModel.name}.${field.name}' is not supported: '${parentModel.name}' has no primary key (@@ignoreId).`,
+  );
 }
 
 const ARITH_OPS = [

@@ -156,7 +156,8 @@ export class EmberClientBase {
   }
 
   async $disconnect(): Promise<void> {
-    if (!this.connected) return;
+    // The first query opens the pool lazily without going through $connect,
+    // so always ask the driver (a no-op when nothing is open).
     await this.driver.disconnect();
     this.connected = false;
   }

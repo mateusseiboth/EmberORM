@@ -101,6 +101,7 @@ model Post {
 | Logging           | `log: true` or a `QueryEvent` callback                                     |
 | Studio            | `ember studio` — local web GUI to browse & edit data (CRUD)               |
 | Tooling           | `ember init / db pull / generate / format / validate / studio`            |
+| Legacy tables     | tables without a primary key via `@@ignoreId` (reads + bulk writes)       |
 
 ## EmberStudio
 

@@ -5,6 +5,8 @@ import {
   type FieldNode,
   type ModelNode,
   type SchemaDocument,
+  findModel,
+  isKeyless,
   relationFields,
   scalarFields,
 } from "@ember/ast";
@@ -297,13 +299,16 @@ ${include || "  [k: string]: never;"}${countLine}
           isOptionalOnCreate(f) || foreignKeys.has(f.name) ? "?" : "";
         return `  ${f.name}${optional}: ${this.inputScalarType(f)};`;
       });
-    const createRelations = relationFields(model).map(
+    const writableRelations = relationFields(model).filter((f) =>
+      this.isNestedWritable(model, f),
+    );
+    const createRelations = writableRelations.map(
       (f) => `  ${f.name}?: ${this.nestedCreate(f)};`,
     );
     const updateScalars = scalarFields(model).map(
       (f) => `  ${f.name}?: ${this.updateScalarType(f)};`,
     );
-    const updateRelations = relationFields(model).map(
+    const updateRelations = writableRelations.map(
       (f) => `  ${f.name}?: ${this.nestedUpdate(f)};`,
     );
 
@@ -337,8 +342,31 @@ ${[...updateScalars, ...updateRelations].join("\n")}
     return `${value} | { set?: ${value} }`;
   }
 
+  /**
+   * Nested writes need the key of the row on the other side: a keyless model
+   * cannot pass its key down to children, and a to-one target without a key
+   * cannot hand one back. Those relations are left out of the write inputs
+   * (the foreign-key scalar is still writable).
+   */
+  private isNestedWritable(model: ModelNode, field: FieldNode): boolean {
+    if (field.isList) return !isKeyless(model);
+    return !this.targetsKeyless(field);
+  }
+
+  private targetsKeyless(field: FieldNode): boolean {
+    const target = findModel(this.schema, field.type);
+    return !!target && isKeyless(target);
+  }
+
+  /** Into a keyless child only `create` works: the other ops need a unique where. */
+  private keylessChildWrite(field: FieldNode): string {
+    const t = field.type;
+    return `{ create?: ${t}CreateInput | ${t}CreateInput[] }`;
+  }
+
   private nestedCreate(field: FieldNode): string {
     const t = field.type;
+    if (this.targetsKeyless(field)) return this.keylessChildWrite(field);
     if (field.isList) {
       return `{ create?: ${t}CreateInput | ${t}CreateInput[]; connect?: ${t}WhereUniqueInput | ${t}WhereUniqueInput[]; connectOrCreate?: { where: ${t}WhereUniqueInput; create: ${t}CreateInput } | { where: ${t}WhereUniqueInput; create: ${t}CreateInput }[] }`;
     }
@@ -347,6 +375,7 @@ ${[...updateScalars, ...updateRelations].join("\n")}
 
   private nestedUpdate(field: FieldNode): string {
     const t = field.type;
+    if (this.targetsKeyless(field)) return this.keylessChildWrite(field);
     if (field.isList) {
       return `{ create?: ${t}CreateInput | ${t}CreateInput[]; connect?: ${t}WhereUniqueInput | ${t}WhereUniqueInput[]; disconnect?: ${t}WhereUniqueInput | ${t}WhereUniqueInput[]; set?: ${t}WhereUniqueInput | ${t}WhereUniqueInput[]; delete?: ${t}WhereUniqueInput | ${t}WhereUniqueInput[] }`;
     }
@@ -434,25 +463,17 @@ export type ${n}GroupByArgs = ${n}AggregateArgs & {
 };`;
   }
 
+  /**
+   * Typed delegate. A `@@ignoreId` model has no key to address or read back a
+   * single row, so the identity-based operations are left out of its type.
+   */
   private delegateInterface(model: ModelNode): string {
     const n = model.name;
+    const methods = delegateMethods(n).filter(
+      ([op]) => !isKeyless(model) || !IDENTITY_OPERATIONS.has(op),
+    );
     return `export interface ${n}Delegate {
-  findMany<A extends ${n}FindManyArgs>(args?: A): Promise<${n}GetPayload<A>[]>;
-  findFirst<A extends ${n}FindFirstArgs>(args?: A): ${n}Fluent<A, null>;
-  findFirstOrThrow<A extends ${n}FindFirstArgs>(args?: A): ${n}Fluent<A, never>;
-  findUnique<A extends ${n}FindUniqueArgs>(args: A): ${n}Fluent<A, null>;
-  findUniqueOrThrow<A extends ${n}FindUniqueArgs>(args: A): ${n}Fluent<A, never>;
-  create<A extends ${n}CreateArgs>(args: A): Promise<${n}GetPayload<A>>;
-  createMany(args: ${n}CreateManyArgs): Promise<{ count: number }>;
-  createManyAndReturn<A extends ${n}CreateManyAndReturnArgs>(args: A): Promise<${n}GetPayload<A>[]>;
-  update<A extends ${n}UpdateArgs>(args: A): Promise<${n}GetPayload<A>>;
-  updateMany(args: ${n}UpdateManyArgs): Promise<{ count: number }>;
-  upsert<A extends ${n}UpsertArgs>(args: A): Promise<${n}GetPayload<A>>;
-  delete<A extends ${n}DeleteArgs>(args: A): Promise<${n}GetPayload<A>>;
-  deleteMany(args?: ${n}DeleteManyArgs): Promise<{ count: number }>;
-  count(args?: ${n}CountArgs): Promise<number>;
-  aggregate(args?: ${n}AggregateArgs): Promise<Record<string, any>>;
-  groupBy(args: ${n}GroupByArgs): Promise<Record<string, any>[]>;
+${methods.map(([, signature]) => `  ${signature}`).join("\n")}
 }`;
   }
 
@@ -625,6 +646,38 @@ export type JsonFilter = {
   string_ends_with?: string;
   path?: string[];
 };`;
+
+/** Operations that address one row by key or read the written row back by key. */
+const IDENTITY_OPERATIONS = new Set([
+  "findUnique",
+  "findUniqueOrThrow",
+  "create",
+  "createManyAndReturn",
+  "update",
+  "upsert",
+  "delete",
+]);
+
+function delegateMethods(n: string): [string, string][] {
+  return [
+    ["findMany", `findMany<A extends ${n}FindManyArgs>(args?: A): Promise<${n}GetPayload<A>[]>;`],
+    ["findFirst", `findFirst<A extends ${n}FindFirstArgs>(args?: A): ${n}Fluent<A, null>;`],
+    ["findFirstOrThrow", `findFirstOrThrow<A extends ${n}FindFirstArgs>(args?: A): ${n}Fluent<A, never>;`],
+    ["findUnique", `findUnique<A extends ${n}FindUniqueArgs>(args: A): ${n}Fluent<A, null>;`],
+    ["findUniqueOrThrow", `findUniqueOrThrow<A extends ${n}FindUniqueArgs>(args: A): ${n}Fluent<A, never>;`],
+    ["create", `create<A extends ${n}CreateArgs>(args: A): Promise<${n}GetPayload<A>>;`],
+    ["createMany", `createMany(args: ${n}CreateManyArgs): Promise<{ count: number }>;`],
+    ["createManyAndReturn", `createManyAndReturn<A extends ${n}CreateManyAndReturnArgs>(args: A): Promise<${n}GetPayload<A>[]>;`],
+    ["update", `update<A extends ${n}UpdateArgs>(args: A): Promise<${n}GetPayload<A>>;`],
+    ["updateMany", `updateMany(args: ${n}UpdateManyArgs): Promise<{ count: number }>;`],
+    ["upsert", `upsert<A extends ${n}UpsertArgs>(args: A): Promise<${n}GetPayload<A>>;`],
+    ["delete", `delete<A extends ${n}DeleteArgs>(args: A): Promise<${n}GetPayload<A>>;`],
+    ["deleteMany", `deleteMany(args?: ${n}DeleteManyArgs): Promise<{ count: number }>;`],
+    ["count", `count(args?: ${n}CountArgs): Promise<number>;`],
+    ["aggregate", `aggregate(args?: ${n}AggregateArgs): Promise<Record<string, any>>;`],
+    ["groupBy", `groupBy(args: ${n}GroupByArgs): Promise<Record<string, any>[]>;`],
+  ];
+}
 
 function isGeneratedOnCreate(field: FieldNode): boolean {
   return field.default?.function?.name === "autoincrement";

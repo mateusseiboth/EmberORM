@@ -42,8 +42,10 @@ export type AttributeArgValue =
   | { kind: "array"; items: AttributeArgValue[] };
 
 export interface DefaultValue {
-  /** A scalar literal default. */
+  /** A scalar literal default: `@default("S")`, `@default(0)`, `@default(true)`. */
   literal?: string | number | boolean;
+  /** A bare enum value reference: `@default(ADMIN)`. Stored as the value name. */
+  enumValue?: string;
   /** A function default such as now(), uuid(), cuid(), autoincrement(). */
   function?: { name: string; args: AttributeArgValue[] };
 }
@@ -112,6 +114,12 @@ export interface ModelNode {
   primaryKey: string[];
   uniqueIndexes: UniqueIndex[];
   indexes: IndexNode[];
+  /**
+   * `@@ignoreId`: the table has no primary key (legacy schemas). The model is
+   * readable and supports bulk writes, but every operation that identifies a
+   * single row (findUnique, create, update, upsert, delete) is unavailable.
+   */
+  ignoreId?: boolean;
   documentation?: string;
 }
 
@@ -184,6 +192,11 @@ export function scalarFields(model: ModelNode): FieldNode[] {
 /** Returns relation (object) fields only. */
 export function relationFields(model: ModelNode): FieldNode[] {
   return model.fields.filter((f) => f.kind === "object");
+}
+
+/** True for a `@@ignoreId` model, which has no primary key to identify a row. */
+export function isKeyless(model: ModelNode): boolean {
+  return model.ignoreId === true;
 }
 
 export function idFields(model: ModelNode): FieldNode[] {

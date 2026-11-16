@@ -257,12 +257,14 @@ function defaultClause(def: DefaultValue | undefined): string | null {
         return null;
     }
   }
+  // An enum column stores the value name as text.
+  if (def.enumValue !== undefined) return `DEFAULT ${quoteLiteral(def.enumValue)}`;
   if (def.literal === undefined) return null;
   if (typeof def.literal === "boolean") {
     return `DEFAULT ${def.literal ? "TRUE" : "FALSE"}`;
   }
   if (typeof def.literal === "number") return `DEFAULT ${def.literal}`;
-  return `DEFAULT '${String(def.literal).replace(/'/g, "''")}'`;
+  return `DEFAULT ${quoteLiteral(def.literal)}`;
 }
 
 function referentialSql(action: string): string {

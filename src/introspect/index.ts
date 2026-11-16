@@ -127,9 +127,22 @@ export class Introspector {
         .filter((u) => u.columns.length > 1)
         .map((u) => ({ fields: u.columns.map((c) => fieldNameMap.get(c)!) })),
       indexes: [],
+      ...(pk ? {} : keylessMarker(table)),
     };
     return model;
   }
+}
+
+/**
+ * A table without a primary key is pulled as `@@ignoreId` so the schema stays
+ * valid and the client can still read it; the `///` note tells the reader why
+ * the identity-based operations are missing.
+ */
+function keylessMarker(table: string): Pick<ModelNode, "ignoreId" | "documentation"> {
+  return {
+    ignoreId: true,
+    documentation: `Table ${table} has no primary key: only read and bulk operations are generated (no findUnique/create/update/upsert/delete).`,
+  };
 }
 
 function buildField(
@@ -173,8 +186,8 @@ function parseDefault(col: RawColumn): DefaultValue | undefined {
   if (/^CURRENT_TIMESTAMP/i.test(src)) return { function: { name: "now", args: [] } };
   if (/^(TRUE|FALSE)$/i.test(src)) return { literal: /^TRUE$/i.test(src) };
   if (/^-?\d+(\.\d+)?$/.test(src)) return { literal: Number(src) };
-  const str = /^'(.*)'$/.exec(src);
-  if (str) return { literal: str[1]! };
+  const str = /^'(.*)'$/s.exec(src);
+  if (str) return { literal: str[1]!.replace(/''/g, "'") };
   return undefined;
 }
 
@@ -277,6 +290,9 @@ function buildNameMap(
   for (const dbName of uniq(dbNames)) {
     let name = transform(dbName);
     if (!name) name = dbName;
+    // Firebird accepts quoted identifiers such as "1VIADESCRICAO", but a schema
+    // identifier cannot start with a digit; the @map keeps the real name.
+    if (/^\d/.test(name)) name = `_${name}`;
     let candidate = name;
     let i = 1;
     while (used.has(candidate)) candidate = `${name}_${++i}`;

@@ -267,6 +267,9 @@ export class Parser {
       case "map":
         model.dbName = literalString(args[0]);
         break;
+      case "ignoreId":
+        model.ignoreId = true;
+        break;
       default:
         throw this.error(`Unknown block attribute '@@${name}'`, start);
     }
@@ -444,7 +447,7 @@ function toDefaultValue(v: AttributeArgValue | undefined): DefaultValue {
       return { literal: v.value };
     case "ref":
       // enum value default such as @default(USER)
-      return { literal: v.value };
+      return { enumValue: v.value };
     default:
       return {};
   }

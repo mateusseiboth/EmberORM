@@ -4,6 +4,7 @@ import {
   type SchemaDocument,
   findModel,
   idFields,
+  isKeyless,
   scalarFields,
 } from "@ember/ast";
 import {
@@ -125,6 +126,7 @@ export class QueryEngine {
     args: FindUniqueArgs,
   ): Promise<Record<string, unknown> | null> {
     const model = this.model(name);
+    requireKey(model, "findUnique");
     this.assertUniqueWhere(model, args.where);
     const rows = await this.run((tx) =>
       this.readMany(
@@ -176,8 +178,9 @@ export class QueryEngine {
 
   // ---- writes -------------------------------------------------------------
 
-  create(name: string, args: CreateArgs): Promise<Record<string, unknown>> {
+  async create(name: string, args: CreateArgs): Promise<Record<string, unknown>> {
     const model = this.model(name);
+    requireKey(model, "create");
     return this.run(async (tx) => {
       const writer = new WriteProcessor(this.schema, this.dialect, this.execOn(tx));
       const keys = await writer.create(model, args.data);
@@ -199,11 +202,12 @@ export class QueryEngine {
   }
 
   /** Like createMany, but returns the created records (no nested relations). */
-  createManyAndReturn(
+  async createManyAndReturn(
     name: string,
     args: CreateManyAndReturnArgs,
   ): Promise<Record<string, unknown>[]> {
     const model = this.model(name);
+    requireKey(model, "createManyAndReturn");
     return this.run(async (tx) => {
       const exec = this.execOn(tx);
       const writer = new WriteProcessor(this.schema, this.dialect, exec);
@@ -217,8 +221,9 @@ export class QueryEngine {
     });
   }
 
-  update(name: string, args: UpdateArgs): Promise<Record<string, unknown>> {
+  async update(name: string, args: UpdateArgs): Promise<Record<string, unknown>> {
     const model = this.model(name);
+    requireKey(model, "update");
     this.assertUniqueWhere(model, args.where);
     return this.run(async (tx) => {
       const exec = this.execOn(tx);
@@ -243,8 +248,9 @@ export class QueryEngine {
     });
   }
 
-  upsert(name: string, args: UpsertArgs): Promise<Record<string, unknown>> {
+  async upsert(name: string, args: UpsertArgs): Promise<Record<string, unknown>> {
     const model = this.model(name);
+    requireKey(model, "upsert");
     this.assertUniqueWhere(model, args.where);
     return this.run(async (tx) => {
       const exec = this.execOn(tx);
@@ -260,8 +266,9 @@ export class QueryEngine {
     });
   }
 
-  delete(name: string, args: DeleteArgs): Promise<Record<string, unknown>> {
+  async delete(name: string, args: DeleteArgs): Promise<Record<string, unknown>> {
     const model = this.model(name);
+    requireKey(model, "delete");
     this.assertUniqueWhere(model, args.where);
     return this.run(async (tx) => {
       const exec = this.execOn(tx);
@@ -588,6 +595,17 @@ export class QueryEngine {
 }
 
 // ---- pure helpers ---------------------------------------------------------
+
+/**
+ * Guard for operations that address one row by key, or read the written row
+ * back by key: a `@@ignoreId` model has no key, so they cannot be honored.
+ */
+function requireKey(model: ModelNode, operation: string): void {
+  if (!isKeyless(model)) return;
+  throw new QueryValidationError(
+    `${operation}() is not available on '${model.name}': the model has no primary key (@@ignoreId). Use findFirst/findMany, createMany, updateMany or deleteMany.`,
+  );
+}
 
 function fieldByName(model: ModelNode, name: string): FieldNode {
   const f = model.fields.find((x) => x.name === name);

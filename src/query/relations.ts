@@ -67,6 +67,11 @@ export function resolveRelation(
   // Fallback: implicit relation by primary keys (rare, e.g. 1:1 by id).
   const fromFields = idFields(model).map((f) => f.name);
   const toFields = idFields(relatedModel).map((f) => f.name);
+  if (fromFields.length === 0 || toFields.length === 0) {
+    throw new QueryValidationError(
+      `Relation '${model.name}.${field.name}' has no @relation(fields, references) and cannot be joined by primary key: a model without one (@@ignoreId) needs explicit fields/references.`,
+    );
+  }
   return build(field, model, relatedModel, fromFields, toFields, false);
 }
 
