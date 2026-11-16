@@ -235,6 +235,13 @@ export type ${model.name}WhereUniqueInput = ${this.whereUnique(model)};`;
   }
 
   private fieldFilter(field: FieldNode): string {
+    const filter = this.requiredFieldFilter(field);
+    // The engine compiles `null` to IS NULL and `{ not: null }` to IS NOT NULL.
+    if (field.isRequired) return filter;
+    return `${filter} | null | { not: null }`;
+  }
+
+  private requiredFieldFilter(field: FieldNode): string {
     const base = baseTsType(field, this.schema);
     const filterName = FILTER_FOR_SCALAR[field.type] ?? null;
     if (field.kind === "enum") {
