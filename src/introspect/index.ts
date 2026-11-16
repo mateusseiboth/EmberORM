@@ -312,3 +312,16 @@ function groupBy<T>(items: T[], key: (t: T) => string): Map<string, T[]> {
   }
   return map;
 }
+
+/**
+ * `db pull` rewrites the models, not the user's configuration: keep the generators of the
+ * schema being replaced (an `output` pointing inside the project, for one). Without a previous
+ * schema, or one with no generator, the introspected default stays.
+ */
+export function keepExistingConfig(
+  pulled: SchemaDocument,
+  existing: SchemaDocument | undefined,
+): SchemaDocument {
+  if (!existing?.generators.length) return pulled;
+  return { ...pulled, generators: existing.generators };
+}

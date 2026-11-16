@@ -15,7 +15,7 @@ import {
   type SqlDriver,
 } from "@ember/driver";
 import { FirebirdDialect } from "@ember/sql";
-import { Introspector } from "@ember/introspect";
+import { Introspector, keepExistingConfig } from "@ember/introspect";
 import { writeClient } from "@ember/generator";
 import { Migrator } from "@ember/migrate";
 import { EmberClientBase } from "@ember/client";
@@ -108,13 +108,9 @@ export async function dbPull(
 
   let url = options.url;
   let envVar = "DATABASE_URL";
-  if (!url && existsSync(path)) {
-    const { document } = loadSchema(path);
-    url = resolveDatasourceUrl(document, dirname(path));
-    if (document.datasource?.url.kind === "env") {
-      envVar = document.datasource.url.value;
-    }
-  }
+  const existing = existsSync(path) ? loadSchema(path).document : undefined;
+  if (existing?.datasource?.url.kind === "env") envVar = existing.datasource.url.value;
+  if (!url && existing) url = resolveDatasourceUrl(existing, dirname(path));
   url ??= process.env.DATABASE_URL;
   if (!url) {
     ctx.error(
@@ -127,9 +123,12 @@ export async function dbPull(
   try {
     await driver.connect();
     const introspector = new Introspector(driver);
-    const document = await introspector.introspect({
-      datasource: { name: "db", provider: "firebird", envVar },
-    });
+    const document = keepExistingConfig(
+      await introspector.introspect({
+        datasource: { name: "db", provider: "firebird", envVar },
+      }),
+      existing,
+    );
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, printSchema(document), "utf8");
     ctx.log(
